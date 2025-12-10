@@ -82,7 +82,9 @@ namespace UIModule
             
             // 프리팹 로드
             string prefabName = uiType.Name;
-            string prefabPath = "UIPrefabs/" + prefabName;
+            // UIManager의 프리팹 경로 설정 사용
+            string prefabPathPrefix = UIManager.Instance != null ? GetPrefabPathPrefix() : "UIPrefabs/";
+            string prefabPath = prefabPathPrefix + prefabName;
             GameObject prefab = Resources.Load<GameObject>(prefabPath);
             
             if (prefab == null)
@@ -262,6 +264,25 @@ namespace UIModule
         public Dictionary<System.Type, UIPool> GetAllPools()
         {
             return new Dictionary<System.Type, UIPool>(_pools);
+        }
+        
+        /// <summary>
+        /// UIManager에서 프리팹 경로 접두사 가져오기
+        /// </summary>
+        private string GetPrefabPathPrefix()
+        {
+            if (UIManager.Instance != null)
+            {
+                string pathPrefix = UIManager.Instance.GetPrefabPathPrefix();
+                if (!string.IsNullOrEmpty(pathPrefix))
+                {
+                    // 경로 끝에 슬래시가 없으면 추가
+                    return pathPrefix.EndsWith("/") ? pathPrefix : pathPrefix + "/";
+                }
+            }
+            
+            // 기본값 반환
+            return "UIPrefabs/";
         }
     }
 }

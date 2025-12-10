@@ -778,6 +778,14 @@ namespace UIModule
         {
             return _usePooling;
         }
+        
+        /// <summary>
+        /// 프리팹 경로 접두사 가져오기
+        /// </summary>
+        public string GetPrefabPathPrefix()
+        {
+            return _prefabPathPrefix;
+        }
     }
 }
 
