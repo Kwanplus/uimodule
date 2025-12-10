@@ -85,7 +85,8 @@ namespace UIModule
         {
             Debug.Log("ButtonPopup 클릭됨");
             // MessageBox 팝업 표시
-            UIManager.Instance.ShowPopup<MessageBox>();
+            //UIManager.Instance.ShowPopup<MessageBox>();
+            UIManager.Instance.ShowPopup<RemainPopupOnly>();
         }
     }
 }

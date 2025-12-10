@@ -31,6 +31,9 @@ namespace UIModule
         // 타입별 풀 관리
         private Dictionary<System.Type, UIPool> _pools = new Dictionary<System.Type, UIPool>();
         
+        // 인스턴스와 풀의 매핑 (레이어 Canvas로 이동해도 추적 가능)
+        private Dictionary<BaseUI, UIPool> _instanceToPoolMap = new Dictionary<BaseUI, UIPool>();
+        
         // 풀 부모 Transform
         private Transform _poolRoot;
         
@@ -127,6 +130,9 @@ namespace UIModule
             T instance = pool.Get<T>();
             if (instance != null && instance.gameObject != null)
             {
+                // 인스턴스와 풀의 매핑 등록 (레이어 Canvas로 이동해도 추적 가능)
+                _instanceToPoolMap[instance] = pool;
+                
                 // 레이어 Canvas 가져오기
                 Canvas layerCanvas = UIManager.Instance.GetLayerCanvas(targetLayer);
                 if (layerCanvas != null)
@@ -181,6 +187,17 @@ namespace UIModule
         }
         
         /// <summary>
+        /// 풀에서 UI 인스턴스 가져오기 (System.Type 버전)
+        /// </summary>
+        public BaseUI GetFromPool(System.Type uiType, UILayer targetLayer)
+        {
+            // 리플렉션을 사용하여 제네릭 메서드 호출
+            var method = typeof(UIPoolManager).GetMethod("GetFromPool", new System.Type[] { typeof(UILayer) });
+            var genericMethod = method.MakeGenericMethod(uiType);
+            return genericMethod.Invoke(this, new object[] { targetLayer }) as BaseUI;
+        }
+        
+        /// <summary>
         /// UI 인스턴스를 풀로 반환
         /// </summary>
         public void ReturnToPool<T>(T instance) where T : BaseUI
@@ -190,16 +207,26 @@ namespace UIModule
                 return;
             }
             
-            // 실제 인스턴스의 타입 사용 (제네릭 타입이 아닌)
-            System.Type uiType = instance.GetType();
-            if (_pools.TryGetValue(uiType, out UIPool pool))
+            // 인스턴스와 풀의 매핑에서 찾기 (가장 확실한 방법)
+            if (_instanceToPoolMap.TryGetValue(instance, out UIPool pool))
             {
                 pool.Return(instance);
+                // 매핑에서 제거 (반환 후에는 더 이상 필요 없음)
+                _instanceToPoolMap.Remove(instance);
             }
             else
             {
-                // 풀이 없으면 제거 (풀이 생성되지 않았을 수 있음 - Pooling 미사용 시 등)
-                Destroy(instance.gameObject);
+                // 매핑에 없으면 타입으로 찾기 (폴백)
+                System.Type uiType = instance.GetType();
+                if (_pools.TryGetValue(uiType, out UIPool fallbackPool))
+                {
+                    fallbackPool.Return(instance);
+                }
+                else
+                {
+                    // 풀이 없으면 제거 (풀이 생성되지 않았을 수 있음 - Pooling 미사용 시 등)
+                    Destroy(instance.gameObject);
+                }
             }
         }
         
@@ -226,6 +253,7 @@ namespace UIModule
                 pool.Clear();
             }
             _pools.Clear();
+            _instanceToPoolMap.Clear();
         }
         
         /// <summary>

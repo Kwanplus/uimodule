@@ -37,6 +37,22 @@ namespace UIModule.Editor
         private string _newUIName = "";
         private bool _isCreatingScreen = true; // true: Screen, false: Popup
         
+        // Popup 옵션 (팝업 선택 시에만 사용)
+        private enum PopupCloseOnScreenChange
+        {
+            닫힘,
+            남아있음
+        }
+        
+        private enum PopupInstanceType
+        {
+            복수로열림,
+            하나만존재
+        }
+        
+        private PopupCloseOnScreenChange _popupCloseOnScreenChange = PopupCloseOnScreenChange.닫힘;
+        private PopupInstanceType _popupInstanceType = PopupInstanceType.복수로열림;
+        
         private List<UIInfo> _uiList = new List<UIInfo>();
         private bool _isRefreshing = false;
         
@@ -408,6 +424,31 @@ namespace UIModule.Editor
             EditorGUILayout.EndHorizontal();
             
             EditorGUILayout.Space(5);
+            
+            // Popup 옵션 (팝업 선택 시에만 표시)
+            if (!_isCreatingScreen)
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("팝업 옵션", EditorStyles.boldLabel);
+                EditorGUILayout.Space(3);
+                
+                // 스크린 이동시 닫힘/남아있음 옵션
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("스크린 이동시:", GUILayout.Width(100));
+                _popupCloseOnScreenChange = (PopupCloseOnScreenChange)EditorGUILayout.EnumPopup(_popupCloseOnScreenChange);
+                EditorGUILayout.EndHorizontal();
+                
+                EditorGUILayout.Space(3);
+                
+                // 같은 종류의 팝업이 하나만 존재할 수 있는지 옵션
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("팝업 타입:", GUILayout.Width(100));
+                _popupInstanceType = (PopupInstanceType)EditorGUILayout.EnumPopup(_popupInstanceType);
+                EditorGUILayout.EndHorizontal();
+                
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(5);
+            }
             
             // 폴더 경로 설정
             _createScrollPosition = EditorGUILayout.BeginScrollView(
@@ -874,6 +915,39 @@ namespace UIModule.Editor
             
             // 임시 GameObject 제거
             DestroyImmediate(prefabGO);
+            
+            // Popup인 경우 프리팹 에셋에 옵션 값 설정 (프리팹에 Serialize되도록)
+            if (!_isCreatingScreen && prefab != null)
+            {
+                BasePopup popupComponent = prefab.GetComponent<BasePopup>();
+                if (popupComponent != null)
+                {
+                    // 프리팹 에셋의 SerializedObject를 사용하여 값 설정
+                    SerializedObject prefabSerializedObject = new SerializedObject(popupComponent);
+                    
+                    // 옵션 값 설정
+                    bool closeOnScreenChange = _popupCloseOnScreenChange == PopupCloseOnScreenChange.닫힘;
+                    bool isSingleton = _popupInstanceType == PopupInstanceType.하나만존재;
+                    
+                    SerializedProperty closeOnScreenChangeProp = prefabSerializedObject.FindProperty("_closeOnScreenChange");
+                    SerializedProperty isSingletonProp = prefabSerializedObject.FindProperty("_isSingleton");
+                    
+                    if (closeOnScreenChangeProp != null)
+                    {
+                        closeOnScreenChangeProp.boolValue = closeOnScreenChange;
+                    }
+                    if (isSingletonProp != null)
+                    {
+                        isSingletonProp.boolValue = isSingleton;
+                    }
+                    
+                    prefabSerializedObject.ApplyModifiedProperties();
+                    
+                    // 프리팹 에셋 저장
+                    EditorUtility.SetDirty(prefab);
+                    AssetDatabase.SaveAssets();
+                }
+            }
             
             AssetDatabase.Refresh();
             

@@ -13,6 +13,18 @@ namespace UIModule
         /// </summary>
         public bool CanCloseByBackKey { get; protected set; } = true;
         
+        /// <summary>
+        /// 스크린 이동 시 팝업이 닫히는지 여부 (true: 닫힘, false: 남아있음)
+        /// </summary>
+        [SerializeField] protected bool _closeOnScreenChange = true;
+        public bool CloseOnScreenChange => _closeOnScreenChange;
+        
+        /// <summary>
+        /// 같은 종류의 팝업이 하나만 존재할 수 있는지 여부 (true: 싱글톤, false: 복수 가능)
+        /// </summary>
+        [SerializeField] protected bool _isSingleton = false;
+        public bool IsSingleton => _isSingleton;
+        
         protected virtual void Awake()
         {
             layer = UILayer.Popup;

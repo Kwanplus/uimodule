@@ -178,6 +178,34 @@ namespace UIModule
         /// </summary>
         public void ShowScreen<T>() where T : BaseScreen
         {
+            System.Type screenType = typeof(T);
+            
+            // 스택에서 같은 타입의 Screen이 있는지 확인하고 제거
+            // Screen은 하나씩만 열리므로 같은 타입이 중복으로 스택에 있으면 안 됨
+            Stack<BaseScreen> tempStack = new Stack<BaseScreen>();
+            BaseScreen existingScreenOfSameType = null;
+            
+            while (_screenStack.Count > 0)
+            {
+                BaseScreen screen = _screenStack.Pop();
+                if (screen != null && screen.GetType() == screenType)
+                {
+                    // 같은 타입의 Screen이면 제거하고 풀로 반환
+                    existingScreenOfSameType = screen;
+                    screen.Hide(); // 풀로 반환됨
+                }
+                else
+                {
+                    tempStack.Push(screen);
+                }
+            }
+            
+            // 스택 복원
+            while (tempStack.Count > 0)
+            {
+                _screenStack.Push(tempStack.Pop());
+            }
+            
             // 기존 Screen이 있으면 숨김 (스택에 유지)
             if (_screenStack.Count > 0)
             {
@@ -189,12 +217,47 @@ namespace UIModule
             }
             
             // 새 Screen 찾기 또는 생성
-            T screen = FindOrCreateUI<T>(UILayer.Screen);
-            if (screen != null)
+            T newScreen = FindOrCreateUI<T>(UILayer.Screen);
+            if (newScreen != null)
             {
+                // 스크린 이동 시 닫혀야 하는 팝업들 닫기
+                ClosePopupsOnScreenChange();
+                
                 // 스택에 추가
-                _screenStack.Push(screen);
-                screen.Show();
+                _screenStack.Push(newScreen);
+                newScreen.Show();
+            }
+        }
+        
+        /// <summary>
+        /// 스크린 이동 시 닫혀야 하는 팝업들 닫기
+        /// </summary>
+        private void ClosePopupsOnScreenChange()
+        {
+            Stack<BasePopup> tempStack = new Stack<BasePopup>();
+            
+            while (_popupStack.Count > 0)
+            {
+                BasePopup popup = _popupStack.Pop();
+                if (popup != null)
+                {
+                    if (popup.CloseOnScreenChange)
+                    {
+                        // 스크린 이동 시 닫혀야 하는 팝업
+                        popup.Hide(); // 풀로 반환됨
+                    }
+                    else
+                    {
+                        // 남아있어야 하는 팝업
+                        tempStack.Push(popup);
+                    }
+                }
+            }
+            
+            // 남아있어야 하는 팝업들을 스택에 복원
+            while (tempStack.Count > 0)
+            {
+                _popupStack.Push(tempStack.Pop());
             }
         }
         
@@ -219,7 +282,32 @@ namespace UIModule
                 BaseScreen previousScreen = _screenStack.Peek();
                 if (previousScreen != null)
                 {
-                    previousScreen.Show();
+                    // 풀링 사용 시, 이미 풀로 반환되었을 수 있으므로
+                    // 비활성화되어 있으면 풀에서 다시 가져와야 함
+                    if (_usePooling && UIPoolManager.Instance != null && !previousScreen.gameObject.activeSelf)
+                    {
+                            // 스택에서 제거
+                            _screenStack.Pop();
+                            System.Type screenType = previousScreen.GetType();
+                            
+                            // FindOrCreateUIByType을 사용하여 풀에서 다시 가져오기
+                            BaseScreen newScreen = FindOrCreateUIByType(screenType, UILayer.Screen) as BaseScreen;
+                            
+                            if (newScreen != null)
+                            {
+                                _screenStack.Push(newScreen);
+                                newScreen.Show();
+                            }
+                            else
+                            {
+                                Debug.LogWarning($"풀에서 {screenType.Name}을 가져올 수 없습니다.");
+                            }
+                    }
+                    else
+                    {
+                        // 풀링 미사용이거나 아직 활성화되어 있으면 그냥 Show
+                        previousScreen.Show();
+                    }
                 }
             }
         }
@@ -244,13 +332,52 @@ namespace UIModule
         /// </summary>
         public T ShowPopup<T>() where T : BasePopup
         {
-            T popup = FindOrCreateUI<T>(UILayer.Popup);
-            if (popup != null)
+            System.Type popupType = typeof(T);
+            
+            // 싱글톤 팝업인 경우 기존 팝업이 있으면 닫기
+            // 먼저 스택에서 같은 타입의 팝업 찾기
+            Stack<BasePopup> tempStack = new Stack<BasePopup>();
+            BasePopup existingPopup = null;
+            
+            while (_popupStack.Count > 0)
             {
-                _popupStack.Push(popup);
-                popup.Show();
+                BasePopup popup = _popupStack.Pop();
+                if (popup != null && popup.GetType() == popupType)
+                {
+                    // 같은 타입의 팝업 발견
+                    if (popup.IsSingleton)
+                    {
+                        // 싱글톤 팝업이면 기존 팝업 닫기
+                        existingPopup = popup;
+                        popup.Hide(); // 풀로 반환됨
+                    }
+                    else
+                    {
+                        // 복수 가능한 팝업이면 스택에 다시 추가
+                        tempStack.Push(popup);
+                    }
+                }
+                else
+                {
+                    tempStack.Push(popup);
+                }
             }
-            return popup;
+            
+            // 스택 복원
+            while (tempStack.Count > 0)
+            {
+                _popupStack.Push(tempStack.Pop());
+            }
+            
+            // 새 팝업 가져오기
+            T newPopup = FindOrCreateUI<T>(UILayer.Popup);
+            if (newPopup != null)
+            {
+                // 스택에 추가 (싱글톤 팝업의 경우 기존 팝업은 이미 닫혔음)
+                _popupStack.Push(newPopup);
+                newPopup.Show();
+            }
+            return newPopup;
         }
         
         /// <summary>
@@ -316,12 +443,18 @@ namespace UIModule
         /// </summary>
         private T FindOrCreateUI<T>(UILayer targetLayer) where T : BaseUI
         {
-            System.Type uiType = typeof(T);
-            
+            return FindOrCreateUIByType(typeof(T), targetLayer) as T;
+        }
+        
+        /// <summary>
+        /// UI 찾기 또는 생성 (System.Type 버전)
+        /// </summary>
+        private BaseUI FindOrCreateUIByType(System.Type uiType, UILayer targetLayer)
+        {
             // Pooling 사용 시 풀에서만 가져오기 (캐시나 씬에서 찾지 않음)
             if (_usePooling)
             {
-                T pooledInstance = UIPoolManager.Instance.GetFromPool<T>(targetLayer);
+                BaseUI pooledInstance = UIPoolManager.Instance.GetFromPool(uiType, targetLayer);
                 if (pooledInstance != null)
                 {
                     // 캐시에 저장 (Screen의 경우) - 참조용으로만 사용
@@ -342,18 +475,14 @@ namespace UIModule
             {
                 if (cachedUI != null && cachedUI.gameObject != null)
                 {
-                    T ui = cachedUI as T;
-                    if (ui != null)
+                    // 올바른 레이어에 있는지 확인
+                    Canvas targetCanvas = GetLayerCanvas(targetLayer);
+                    if (targetCanvas != null && cachedUI.transform.parent != targetCanvas.transform)
                     {
-                        // 올바른 레이어에 있는지 확인
-                        Canvas targetCanvas = GetLayerCanvas(targetLayer);
-                        if (targetCanvas != null && ui.transform.parent != targetCanvas.transform)
-                        {
-                            ui.transform.SetParent(targetCanvas.transform, false);
-                        }
-                        // Show 시점에 Initialize가 호출되므로 여기서는 호출하지 않음
-                        return ui;
+                        cachedUI.transform.SetParent(targetCanvas.transform, false);
                     }
+                    // Show 시점에 Initialize가 호출되므로 여기서는 호출하지 않음
+                    return cachedUI;
                 }
                 else
                 {
@@ -362,8 +491,26 @@ namespace UIModule
                 }
             }
             
-            // 씬에서 찾기
-            T existingUI = FindFirstObjectByType<T>();
+            // 씬에서 찾기 (리플렉션 사용)
+            BaseUI existingUI = null;
+            var findMethod = typeof(Object).GetMethod("FindObjectOfType", new System.Type[] { typeof(System.Type) });
+            if (findMethod != null)
+            {
+                existingUI = findMethod.Invoke(null, new object[] { uiType }) as BaseUI;
+            }
+            else
+            {
+                // FindObjectOfType(Type)이 없으면 FindObjectsOfType 사용
+                var findObjectsMethod = typeof(Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type) });
+                if (findObjectsMethod != null)
+                {
+                    BaseUI[] objects = findObjectsMethod.Invoke(null, new object[] { uiType }) as BaseUI[];
+                    if (objects != null && objects.Length > 0)
+                    {
+                        existingUI = objects[0];
+                    }
+                }
+            }
             if (existingUI != null)
             {
                 // 올바른 레이어에 있는지 확인
@@ -379,7 +526,7 @@ namespace UIModule
             }
             
             // 프리팹에서 인스턴스화 시도
-            T prefabInstance = InstantiateFromPrefab<T>(targetLayer);
+            BaseUI prefabInstance = InstantiateFromPrefabByType(uiType, targetLayer);
             if (prefabInstance != null)
             {
                 // 캐시에 저장
@@ -394,7 +541,7 @@ namespace UIModule
             {
                 GameObject uiGO = new GameObject(uiType.Name);
                 uiGO.transform.SetParent(canvas.transform, false);
-                T newUI = uiGO.AddComponent<T>();
+                BaseUI newUI = uiGO.AddComponent(uiType) as BaseUI;
                 // 캐시에 저장
                 _uiInstanceCache[uiType] = newUI;
                 // Show 시점에 Initialize가 호출되므로 여기서는 호출하지 않음
@@ -402,6 +549,102 @@ namespace UIModule
             }
             
             return null;
+        }
+        
+        /// <summary>
+        /// 프리팹에서 UI 인스턴스화 (System.Type 버전)
+        /// </summary>
+        private BaseUI InstantiateFromPrefabByType(System.Type uiType, UILayer targetLayer)
+        {
+            string prefabName = uiType.Name;
+            string prefabPath = _prefabPathPrefix + prefabName;
+            
+            // Resources에서 로드
+            GameObject prefab = Resources.Load<GameObject>(prefabPath);
+            
+            if (prefab == null)
+            {
+                Debug.LogWarning($"프리팹을 찾을 수 없습니다: {prefabPath}. Resources/{_prefabPathPrefix} 폴더에 {prefabName}.prefab 파일이 있는지 확인하세요.");
+                return null;
+            }
+            
+            // 프리팹 인스턴스화
+            Canvas targetCanvas = GetLayerCanvas(targetLayer);
+            if (targetCanvas == null)
+            {
+                Debug.LogError($"레이어 Canvas를 찾을 수 없습니다: {targetLayer}");
+                return null;
+            }
+            
+            GameObject instance = Instantiate(prefab);
+            instance.name = prefabName; // 프리팹 이름에서 (Clone) 제거
+            
+            BaseUI uiComponent = instance.GetComponent(uiType) as BaseUI;
+            if (uiComponent == null)
+            {
+                Debug.LogError($"프리팹에 {uiType.Name} 컴포넌트가 없습니다: {prefabPath}");
+                Destroy(instance);
+                return null;
+            }
+            
+            // 프리팹에 Canvas가 있는지 확인 (있으면 경고)
+            Canvas prefabCanvas = instance.GetComponent<Canvas>();
+            if (prefabCanvas != null)
+            {
+                Debug.LogWarning($"프리팹 {prefabName}에 Canvas가 포함되어 있습니다. " +
+                    $"UIManager가 레이어별 Canvas를 관리하므로 프리팹의 Canvas는 제거하는 것을 권장합니다. " +
+                    $"프리팹의 Canvas를 제거하고 레이어 Canvas의 자식으로 인스턴스화됩니다.");
+                
+                // Canvas 관련 컴포넌트 제거
+                CanvasScaler scaler = instance.GetComponent<CanvasScaler>();
+                if (scaler != null) DestroyImmediate(scaler);
+                
+                GraphicRaycaster raycaster = instance.GetComponent<GraphicRaycaster>();
+                if (raycaster != null) DestroyImmediate(raycaster);
+                
+                DestroyImmediate(prefabCanvas);
+            }
+            
+            // 레이어 Canvas의 자식으로 설정
+            instance.transform.SetParent(targetCanvas.transform, false);
+            
+            // RectTransform Scale 확인 및 수정 (0,0,0이면 1,1,1로 변경)
+            RectTransform rectTransform = instance.GetComponent<RectTransform>();
+            if (rectTransform != null)
+            {
+                Vector3 scale = rectTransform.localScale;
+                if (scale.x == 0 && scale.y == 0 && scale.z == 0)
+                {
+                    rectTransform.localScale = Vector3.one;
+                }
+                
+                // Screen은 Stretch, Popup은 MiddleCenter로 설정
+                if (targetLayer == UILayer.Screen)
+                {
+                    // Screen: 전체 화면을 채우도록 설정
+                    rectTransform.anchorMin = Vector2.zero;
+                    rectTransform.anchorMax = Vector2.one;
+                    rectTransform.sizeDelta = Vector2.zero;
+                    rectTransform.anchoredPosition = Vector2.zero;
+                }
+                else if (targetLayer == UILayer.Popup)
+                {
+                    // Popup: MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
+                    // anchor가 이미 설정되어 있으면 변경하지 않음
+                    if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
+                    {
+                        rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                        rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                        if (rectTransform.sizeDelta == Vector2.zero)
+                        {
+                            rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
+                        }
+                        rectTransform.anchoredPosition = Vector2.zero;
+                    }
+                }
+            }
+            
+            return uiComponent;
         }
         
         /// <summary>
