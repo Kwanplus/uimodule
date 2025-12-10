@@ -82,14 +82,22 @@ namespace UIModule
             
             // 프리팹 로드
             string prefabName = uiType.Name;
-            // UIManager의 프리팹 경로 설정 사용
-            string prefabPathPrefix = UIManager.Instance != null ? GetPrefabPathPrefix() : "UIPrefabs/";
+            // UIManager의 프리팹 경로 설정 사용 (매번 최신 값 가져오기)
+            string prefabPathPrefix = GetPrefabPathPrefix();
             string prefabPath = prefabPathPrefix + prefabName;
+            
+            // 디버그 로그 (개발 중에만 표시)
+            #if UNITY_EDITOR
+            Debug.Log($"[UIPoolManager] 프리팹 로드 시도: Resources/{prefabPath}");
+            #endif
+            
             GameObject prefab = Resources.Load<GameObject>(prefabPath);
             
             if (prefab == null)
             {
-                Debug.LogWarning($"풀을 생성할 수 없습니다. 프리팹을 찾을 수 없습니다: {prefabPath}");
+                Debug.LogError($"풀을 생성할 수 없습니다. 프리팹을 찾을 수 없습니다: Resources/{prefabPath}\n" +
+                    $"현재 프리팹 경로 접두사: '{prefabPathPrefix}'\n" +
+                    $"UIManager 설정 확인: Inspector에서 'Prefab Path Prefix' 필드를 확인하세요.");
                 return null;
             }
             
@@ -267,21 +275,25 @@ namespace UIModule
         }
         
         /// <summary>
-        /// UIManager에서 프리팹 경로 접두사 가져오기
+        /// UIManager에서 프리팹 경로 접두사 가져오기 (매번 최신 값 가져오기)
         /// </summary>
         private string GetPrefabPathPrefix()
         {
+            // UIManager.Instance 접근 시 동적으로 생성될 수 있으므로, 
+            // 항상 최신 인스턴스를 참조하도록 함
             if (UIManager.Instance != null)
             {
                 string pathPrefix = UIManager.Instance.GetPrefabPathPrefix();
                 if (!string.IsNullOrEmpty(pathPrefix))
                 {
                     // 경로 끝에 슬래시가 없으면 추가
-                    return pathPrefix.EndsWith("/") ? pathPrefix : pathPrefix + "/";
+                    string normalizedPath = pathPrefix.EndsWith("/") ? pathPrefix : pathPrefix + "/";
+                    return normalizedPath;
                 }
             }
             
-            // 기본값 반환
+            // UIManager가 없거나 경로가 비어있으면 기본값 반환
+            Debug.LogWarning("[UIPoolManager] UIManager가 없거나 프리팹 경로가 설정되지 않았습니다. 기본값 'UIPrefabs/'를 사용합니다.");
             return "UIPrefabs/";
         }
     }

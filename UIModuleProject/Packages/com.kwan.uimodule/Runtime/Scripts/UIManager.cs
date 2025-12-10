@@ -24,6 +24,10 @@ namespace UIModule
                     GameObject go = new GameObject("UIManager");
                     _instance = go.AddComponent<UIManager>();
                     DontDestroyOnLoad(go);
+                    // 동적으로 생성된 경우 기본값 사용 (나중에 SetPrefabPathPrefix로 변경 가능)
+                    Debug.LogWarning("[UIManager] 동적으로 생성되었습니다. 프리팹 경로는 기본값 'UIPrefabs/'를 사용합니다. " +
+                        "경로를 변경하려면 UIManager.Instance.SetPrefabPathPrefix(\"경로\")를 호출하거나, " +
+                        "씬에 UIManager를 미리 배치하여 Inspector에서 설정하세요.");
                 }
                 return _instance;
             }
@@ -785,6 +789,32 @@ namespace UIModule
         public string GetPrefabPathPrefix()
         {
             return _prefabPathPrefix;
+        }
+        
+        /// <summary>
+        /// 프리팹 경로 접두사 설정 (런타임에 변경 가능)
+        /// </summary>
+        public void SetPrefabPathPrefix(string pathPrefix)
+        {
+            if (string.IsNullOrEmpty(pathPrefix))
+            {
+                Debug.LogWarning("프리팹 경로 접두사가 비어있습니다. 기본값 'UIPrefabs/'를 사용합니다.");
+                _prefabPathPrefix = "UIPrefabs/";
+                return;
+            }
+            
+            // 경로 끝에 슬래시가 없으면 추가
+            string newPathPrefix = pathPrefix.EndsWith("/") ? pathPrefix : pathPrefix + "/";
+            
+            // 경로가 변경되었으면 기존 풀 클리어
+            if (_prefabPathPrefix != newPathPrefix && UIPoolManager.Instance != null)
+            {
+                Debug.Log($"프리팹 경로가 변경되었습니다: '{_prefabPathPrefix}' -> '{newPathPrefix}'. 기존 풀을 클리어합니다.");
+                UIPoolManager.Instance.ClearAllPools();
+            }
+            
+            _prefabPathPrefix = newPathPrefix;
+            Debug.Log($"프리팹 경로 접두사가 설정되었습니다: {_prefabPathPrefix}");
         }
     }
 }
