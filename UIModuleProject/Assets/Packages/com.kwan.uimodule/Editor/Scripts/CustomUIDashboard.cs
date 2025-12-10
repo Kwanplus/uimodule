@@ -670,7 +670,10 @@ namespace UIModule.Editor
                 EditorGUIUtility.PingObject(prefab);
             }
             
-            EditorUtility.DisplayDialog("완료", $"{className} UI가 성공적으로 생성되었습니다!", "확인");
+            // 성공 메시지 (콘솔에 로그 출력)
+            Debug.Log($"<color=green>✓</color> {className} UI가 성공적으로 생성되었습니다! (프리팹: {prefabPath})");
+            
+            EditorUtility.DisplayDialog("성공", $"{className} UI가 성공적으로 생성되었습니다!", "확인");
             
             // 입력 필드 초기화
             _newUIName = "";
@@ -813,13 +816,32 @@ namespace UIModule.Editor
             sb.AppendLine($"    public class {className} : {(isScreen ? "BaseScreen" : "BasePopup")}");
             sb.AppendLine("    {");
             sb.AppendLine("        // UI 요소 참조");
-            sb.AppendLine("        // [SerializeField] private Button _button;");
+            sb.AppendLine("        [SerializeField] private UIButton _buttonConfirm;");
+            if (isScreen)
+            {
+                sb.AppendLine("        [SerializeField] private UIButton _buttonBack;");
+            }
+            else
+            {
+                sb.AppendLine("        [SerializeField] private UIButton _buttonClose;");
+            }
             sb.AppendLine();
             
             if (isScreen)
             {
                 sb.AppendLine("        protected override void OnScreenInitialize()");
                 sb.AppendLine("        {");
+                sb.AppendLine("            // 버튼 클릭 이벤트 등록");
+                sb.AppendLine("            if (_buttonConfirm != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonConfirm.OnClick += OnButtonConfirmClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine("            ");
+                sb.AppendLine("            if (_buttonBack != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonBack.OnClick += OnButtonBackClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine();
                 sb.AppendLine("            // 초기화 로직");
                 sb.AppendLine("        }");
                 sb.AppendLine();
@@ -835,13 +857,56 @@ namespace UIModule.Editor
                 sb.AppendLine();
                 sb.AppendLine("        protected override void OnScreenDestroy()");
                 sb.AppendLine("        {");
+                sb.AppendLine("            // 버튼 클릭 이벤트 해제");
+                sb.AppendLine("            if (_buttonConfirm != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonConfirm.OnClick -= OnButtonConfirmClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine("            ");
+                sb.AppendLine("            if (_buttonBack != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonBack.OnClick -= OnButtonBackClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine();
                 sb.AppendLine("            // 제거 시 로직");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                sb.AppendLine("        /// <summary>");
+                sb.AppendLine("        /// 확인 버튼 클릭 처리");
+                sb.AppendLine("        /// </summary>");
+                sb.AppendLine("        private void OnButtonConfirmClicked()");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // 확인 버튼 로직");
+                sb.AppendLine("            Debug.Log(\"Confirm button clicked\");");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                sb.AppendLine("        /// <summary>");
+                sb.AppendLine("        /// 뒤로가기 버튼 클릭 처리");
+                sb.AppendLine("        /// </summary>");
+                sb.AppendLine("        private void OnButtonBackClicked()");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // 뒤로가기 버튼 로직");
+                sb.AppendLine("            if (UIManager.Instance != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                UIManager.Instance.BackScreen();");
+                sb.AppendLine("            }");
                 sb.AppendLine("        }");
             }
             else
             {
                 sb.AppendLine("        protected override void OnPopupInitialize()");
                 sb.AppendLine("        {");
+                sb.AppendLine("            // 버튼 클릭 이벤트 등록");
+                sb.AppendLine("            if (_buttonConfirm != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonConfirm.OnClick += OnButtonConfirmClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine("            ");
+                sb.AppendLine("            if (_buttonClose != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonClose.OnClick += OnButtonCloseClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine();
                 sb.AppendLine("            // 초기화 로직");
                 sb.AppendLine("        }");
                 sb.AppendLine();
@@ -857,7 +922,36 @@ namespace UIModule.Editor
                 sb.AppendLine();
                 sb.AppendLine("        protected override void OnPopupDestroy()");
                 sb.AppendLine("        {");
+                sb.AppendLine("            // 버튼 클릭 이벤트 해제");
+                sb.AppendLine("            if (_buttonConfirm != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonConfirm.OnClick -= OnButtonConfirmClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine("            ");
+                sb.AppendLine("            if (_buttonClose != null)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                _buttonClose.OnClick -= OnButtonCloseClicked;");
+                sb.AppendLine("            }");
+                sb.AppendLine();
                 sb.AppendLine("            // 제거 시 로직");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                sb.AppendLine("        /// <summary>");
+                sb.AppendLine("        /// 확인 버튼 클릭 처리");
+                sb.AppendLine("        /// </summary>");
+                sb.AppendLine("        private void OnButtonConfirmClicked()");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // 확인 버튼 로직");
+                sb.AppendLine("            Close();");
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                sb.AppendLine("        /// <summary>");
+                sb.AppendLine("        /// 닫기 버튼 클릭 처리");
+                sb.AppendLine("        /// </summary>");
+                sb.AppendLine("        private void OnButtonCloseClicked()");
+                sb.AppendLine("        {");
+                sb.AppendLine("            // 닫기 버튼 로직");
+                sb.AppendLine("            Close();");
                 sb.AppendLine("        }");
             }
             
@@ -904,14 +998,105 @@ namespace UIModule.Editor
                 rectTransform.anchoredPosition = Vector2.zero;
             }
             
+            // BG 이미지 추가
+            GameObject bgGO = new GameObject("BG");
+            bgGO.transform.SetParent(prefabGO.transform, false);
+            RectTransform bgRect = bgGO.AddComponent<RectTransform>();
+            UnityEngine.UI.Image bgImage = bgGO.AddComponent<UnityEngine.UI.Image>();
+            
+            if (_isCreatingScreen)
+            {
+                // Screen: 전체 화면, 어두운 그레이
+                bgImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
+                bgRect.anchorMin = Vector2.zero;
+                bgRect.anchorMax = Vector2.one;
+                bgRect.sizeDelta = Vector2.zero;
+                bgRect.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                // Popup: 400x300 크기, 밝은 그레이
+                bgImage.color = new Color(0.8f, 0.8f, 0.8f, 1f);
+                bgRect.anchorMin = Vector2.zero;
+                bgRect.anchorMax = Vector2.one;
+                bgRect.sizeDelta = Vector2.zero;
+                bgRect.anchoredPosition = Vector2.zero;
+            }
+            
+            // BG를 맨 뒤로 보내기 (SetAsFirstSibling)
+            bgGO.transform.SetAsFirstSibling();
+            
             // 스크립트 컴포넌트 추가
-            prefabGO.AddComponent(scriptType);
+            Component uiComponent = prefabGO.AddComponent(scriptType);
+            
+            // 버튼 위치 설정 (Screen은 하단 중앙, Popup은 하단)
+            Vector2 confirmButtonPos, secondButtonPos;
+            string secondButtonName;
+            if (_isCreatingScreen)
+            {
+                // Screen: 하단 중앙에 배치, 뒤로가기 버튼
+                confirmButtonPos = new Vector2(-70, -400);
+                secondButtonPos = new Vector2(70, -400);
+                secondButtonName = "ButtonBack";
+            }
+            else
+            {
+                // Popup: 하단에 배치, 닫기 버튼
+                confirmButtonPos = new Vector2(-70, -120);
+                secondButtonPos = new Vector2(70, -120);
+                secondButtonName = "ButtonClose";
+            }
+            
+            // 확인 버튼 생성 (왼쪽)
+            GameObject confirmButtonGO = CreateButton("ButtonConfirm", "Confirm", prefabGO.transform, confirmButtonPos);
+            
+            // 두 번째 버튼 생성 (오른쪽)
+            string secondButtonTextEnglish = _isCreatingScreen ? "Back" : "Close";
+            GameObject secondButtonGO = CreateButton(secondButtonName, secondButtonTextEnglish, prefabGO.transform, secondButtonPos);
             
             // 프리팹으로 저장
             string prefabPath = Path.Combine(prefabFolderPath, $"{className}.prefab").Replace('\\', '/');
             
             // 프리팹 생성
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(prefabGO, prefabPath);
+            
+            // 프리팹 에셋에서 버튼 참조 연결
+            if (prefab != null)
+            {
+                Component prefabComponent = prefab.GetComponent(scriptType);
+                if (prefabComponent != null)
+                {
+                    SerializedObject serializedObject = new SerializedObject(prefabComponent);
+                    
+                    // 확인 버튼 참조 연결
+                    SerializedProperty confirmButtonProp = serializedObject.FindProperty("_buttonConfirm");
+                    if (confirmButtonProp != null)
+                    {
+                        GameObject prefabConfirmButton = prefab.transform.Find("ButtonConfirm")?.gameObject;
+                        if (prefabConfirmButton != null)
+                        {
+                            confirmButtonProp.objectReferenceValue = prefabConfirmButton.GetComponent<UIButton>();
+                        }
+                    }
+                    
+                    // 두 번째 버튼 참조 연결 (Screen: _buttonBack, Popup: _buttonClose)
+                    string secondButtonPropertyName = _isCreatingScreen ? "_buttonBack" : "_buttonClose";
+                    string secondButtonObjectName = _isCreatingScreen ? "ButtonBack" : "ButtonClose";
+                    SerializedProperty secondButtonProp = serializedObject.FindProperty(secondButtonPropertyName);
+                    if (secondButtonProp != null)
+                    {
+                        GameObject prefabSecondButton = prefab.transform.Find(secondButtonObjectName)?.gameObject;
+                        if (prefabSecondButton != null)
+                        {
+                            secondButtonProp.objectReferenceValue = prefabSecondButton.GetComponent<UIButton>();
+                        }
+                    }
+                    
+                    serializedObject.ApplyModifiedProperties();
+                    EditorUtility.SetDirty(prefab);
+                    AssetDatabase.SaveAssets();
+                }
+            }
             
             // 임시 GameObject 제거
             DestroyImmediate(prefabGO);
@@ -952,6 +1137,52 @@ namespace UIModule.Editor
             AssetDatabase.Refresh();
             
             return prefabPath;
+        }
+        
+        /// <summary>
+        /// 버튼 GameObject 생성
+        /// </summary>
+        private GameObject CreateButton(string buttonName, string buttonText, Transform parent, Vector2 position)
+        {
+            // 버튼 GameObject 생성
+            GameObject buttonGO = new GameObject(buttonName);
+            buttonGO.transform.SetParent(parent, false);
+            
+            // RectTransform 설정
+            RectTransform buttonRect = buttonGO.AddComponent<RectTransform>();
+            buttonRect.anchorMin = new Vector2(0.5f, 0.5f);
+            buttonRect.anchorMax = new Vector2(0.5f, 0.5f);
+            buttonRect.sizeDelta = new Vector2(120, 40);
+            buttonRect.anchoredPosition = position;
+            
+            // Image 컴포넌트 추가 (버튼 배경)
+            UnityEngine.UI.Image buttonImage = buttonGO.AddComponent<UnityEngine.UI.Image>();
+            buttonImage.color = new Color(0.2f, 0.6f, 1f, 1f); // 파란색 배경
+            
+            // Button 컴포넌트 추가
+            UnityEngine.UI.Button button = buttonGO.AddComponent<UnityEngine.UI.Button>();
+            
+            // 텍스트용 자식 GameObject 생성
+            GameObject textGO = new GameObject("Text");
+            textGO.transform.SetParent(buttonGO.transform, false);
+            
+            RectTransform textRect = textGO.AddComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.sizeDelta = Vector2.zero;
+            textRect.anchoredPosition = Vector2.zero;
+            
+            // TextMeshProUGUI 컴포넌트 추가
+            TMPro.TextMeshProUGUI text = textGO.AddComponent<TMPro.TextMeshProUGUI>();
+            text.text = buttonText;
+            text.fontSize = 18;
+            text.color = Color.white;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            
+            // UIButton 컴포넌트 추가
+            UIButton uiButton = buttonGO.AddComponent<UIButton>();
+            
+            return buttonGO;
         }
     }
 }

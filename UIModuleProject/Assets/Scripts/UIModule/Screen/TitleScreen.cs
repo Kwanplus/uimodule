@@ -66,8 +66,8 @@ namespace UIModule
         /// </summary>
         private void OnButtonNextClicked()
         {
-            Debug.Log("ButtonNext 클릭됨 - LobbyScreen으로 이동");
-            UIManager.Instance.ShowScreen<LobbyScreen>();
+            Debug.Log("ButtonNext 클릭됨 - TestScreen으로 이동");
+            UIManager.Instance.ShowScreen<TestScreen>();
         }
         
         /// <summary>
@@ -86,7 +86,7 @@ namespace UIModule
             Debug.Log("ButtonPopup 클릭됨");
             // MessageBox 팝업 표시
             //UIManager.Instance.ShowPopup<MessageBox>();
-            UIManager.Instance.ShowPopup<RemainPopupOnly>();
+            UIManager.Instance.ShowPopup<TestPopup>();
         }
     }
 }
