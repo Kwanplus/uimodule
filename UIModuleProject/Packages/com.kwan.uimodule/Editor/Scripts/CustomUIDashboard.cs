@@ -61,6 +61,8 @@ namespace UIModule.Editor
         private string _pendingScriptPath = null;
         private string _pendingPrefabFolderPath = null;
         private bool _isWaitingForCompilation = false;
+        private double _compilationStartTime = 0;
+        private const double COMPILATION_TIMEOUT = 30.0; // 30초 타임아웃
         
         private enum UIType
         {
@@ -107,17 +109,57 @@ namespace UIModule.Editor
         
         private void OnUpdate()
         {
-            // 컴파일 대기 중이고 컴파일이 완료되었을 때
-            if (_isWaitingForCompilation && !EditorApplication.isCompiling && !EditorApplication.isUpdating)
+            if (_isWaitingForCompilation)
             {
-                _isWaitingForCompilation = false;
-                
-                // 약간의 추가 대기 (타입이 로드될 시간)
-                EditorApplication.delayCall += () =>
+                // 타임아웃 체크
+                if (EditorApplication.timeSinceStartup - _compilationStartTime > COMPILATION_TIMEOUT)
                 {
-                    System.Threading.Thread.Sleep(300);
-                    CompletePrefabCreation();
-                };
+                    EditorUtility.ClearProgressBar();
+                    _isWaitingForCompilation = false;
+                    
+                    EditorUtility.DisplayDialog("타임아웃", 
+                        $"스크립트 컴파일이 30초 내에 완료되지 않았습니다.\n\n" +
+                        $"클래스 이름: {_pendingClassName}\n" +
+                        $"스크립트 경로: {_pendingScriptPath}\n\n" +
+                        $"콘솔에서 컴파일 에러를 확인해주세요.", 
+                        "확인");
+                    
+                    _pendingClassName = null;
+                    _pendingScriptPath = null;
+                    _pendingPrefabFolderPath = null;
+                    return;
+                }
+                
+                // 컴파일 대기 중이고 컴파일이 완료되었을 때
+                if (!EditorApplication.isCompiling && !EditorApplication.isUpdating)
+                {
+                    _isWaitingForCompilation = false;
+                    EditorUtility.ClearProgressBar();
+                    
+                    // 컴파일 에러 확인
+                    if (EditorUtility.scriptCompilationFailed)
+                    {
+                        EditorUtility.DisplayDialog("컴파일 에러", 
+                            $"스크립트 컴파일에 실패했습니다.\n\n" +
+                            $"클래스 이름: {_pendingClassName}\n" +
+                            $"스크립트 경로: {_pendingScriptPath}\n\n" +
+                            $"콘솔에서 컴파일 에러를 확인해주세요.\n" +
+                            $"특히 패키지 참조가 올바른지 확인하세요.", 
+                            "확인");
+                        
+                        _pendingClassName = null;
+                        _pendingScriptPath = null;
+                        _pendingPrefabFolderPath = null;
+                        return;
+                    }
+                    
+                    // 약간의 추가 대기 (타입이 로드될 시간)
+                    EditorApplication.delayCall += () =>
+                    {
+                        System.Threading.Thread.Sleep(500);
+                        CompletePrefabCreation();
+                    };
+                }
             }
         }
         
@@ -599,6 +641,7 @@ namespace UIModule.Editor
             _pendingScriptPath = scriptPath;
             _pendingPrefabFolderPath = prefabFolder;
             _isWaitingForCompilation = true;
+            _compilationStartTime = EditorApplication.timeSinceStartup;
             
             if (EditorApplication.isCompiling)
             {
@@ -610,7 +653,8 @@ namespace UIModule.Editor
                 // 컴파일이 완료되어 있으면 바로 처리
                 EditorApplication.delayCall += () =>
                 {
-                    System.Threading.Thread.Sleep(300);
+                    System.Threading.Thread.Sleep(500);
+                    EditorUtility.ClearProgressBar();
                     CompletePrefabCreation();
                 };
             }
@@ -621,67 +665,101 @@ namespace UIModule.Editor
         /// </summary>
         private void CompletePrefabCreation()
         {
-            EditorUtility.ClearProgressBar();
-            
-            if (string.IsNullOrEmpty(_pendingClassName) || string.IsNullOrEmpty(_pendingScriptPath))
+            try
             {
-                return;
-            }
-            
-            string className = _pendingClassName;
-            string scriptPath = _pendingScriptPath;
-            
-            // 타입 찾기
-            System.Type scriptType = FindScriptType(className, scriptPath);
-            if (scriptType == null)
-            {
-                EditorUtility.DisplayDialog("오류", 
-                    $"스크립트 컴파일에 실패했거나 타입을 찾을 수 없습니다.\n\n" +
-                    $"클래스 이름: {className}\n" +
-                    $"스크립트 경로: {scriptPath}\n\n" +
-                    $"Unity를 재시작하거나 수동으로 스크립트를 확인해주세요.", 
-                    "확인");
+                EditorUtility.ClearProgressBar();
                 
+                if (string.IsNullOrEmpty(_pendingClassName) || string.IsNullOrEmpty(_pendingScriptPath))
+                {
+                    return;
+                }
+                
+                string className = _pendingClassName;
+                string scriptPath = _pendingScriptPath;
+                
+                // 컴파일 에러 재확인
+                if (EditorUtility.scriptCompilationFailed)
+                {
+                    EditorUtility.DisplayDialog("컴파일 에러", 
+                        $"스크립트 컴파일에 실패했습니다.\n\n" +
+                        $"클래스 이름: {className}\n" +
+                        $"스크립트 경로: {scriptPath}\n\n" +
+                        $"콘솔에서 컴파일 에러를 확인해주세요.\n" +
+                        $"특히 패키지 참조가 올바른지 확인하세요.", 
+                        "확인");
+                    
+                    _pendingClassName = null;
+                    _pendingScriptPath = null;
+                    _pendingPrefabFolderPath = null;
+                    return;
+                }
+                
+                // 타입 찾기 (여러 번 시도)
+                System.Type scriptType = null;
+                for (int i = 0; i < 5; i++)
+                {
+                    scriptType = FindScriptType(className, scriptPath);
+                    if (scriptType != null)
+                    {
+                        break;
+                    }
+                    System.Threading.Thread.Sleep(200);
+                }
+                
+                if (scriptType == null)
+                {
+                    EditorUtility.DisplayDialog("오류", 
+                        $"스크립트 타입을 찾을 수 없습니다.\n\n" +
+                        $"클래스 이름: {className}\n" +
+                        $"스크립트 경로: {scriptPath}\n\n" +
+                        $"가능한 원인:\n" +
+                        $"1. 컴파일 에러가 있습니다 (콘솔 확인)\n" +
+                        $"2. 패키지 참조가 올바르지 않습니다\n" +
+                        $"3. asmdef 파일이 올바르게 설정되지 않았습니다\n\n" +
+                        $"Unity를 재시작하거나 수동으로 스크립트를 확인해주세요.", 
+                        "확인");
+                    
+                    _pendingClassName = null;
+                    _pendingScriptPath = null;
+                    _pendingPrefabFolderPath = null;
+                    return;
+                }
+                
+                // 프리팹 생성
+                string prefabPath = CreatePrefab(className, scriptType, _pendingPrefabFolderPath);
+                if (string.IsNullOrEmpty(prefabPath))
+                {
+                    EditorUtility.DisplayDialog("오류", "프리팹 생성에 실패했습니다.", "확인");
+                    return;
+                }
+                
+                // 자동 새로고침
+                RefreshUIList();
+                
+                // 생성된 프리팹 선택
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                if (prefab != null)
+                {
+                    Selection.activeObject = prefab;
+                    EditorGUIUtility.PingObject(prefab);
+                }
+                
+                // 성공 메시지 (콘솔에 로그 출력)
+                Debug.Log($"<color=green>✓</color> {className} UI가 성공적으로 생성되었습니다! (프리팹: {prefabPath})");
+                
+                EditorUtility.DisplayDialog("성공", $"{className} UI가 성공적으로 생성되었습니다!", "확인");
+                
+                // 입력 필드 초기화
+                _newUIName = "";
+            }
+            finally
+            {
+                // 대기 상태 초기화
                 _pendingClassName = null;
                 _pendingScriptPath = null;
                 _pendingPrefabFolderPath = null;
-                return;
+                EditorUtility.ClearProgressBar();
             }
-            
-            // 프리팹 생성
-            string prefabPath = CreatePrefab(className, scriptType, _pendingPrefabFolderPath);
-            if (string.IsNullOrEmpty(prefabPath))
-            {
-                EditorUtility.DisplayDialog("오류", "프리팹 생성에 실패했습니다.", "확인");
-                _pendingClassName = null;
-                _pendingScriptPath = null;
-                _pendingPrefabFolderPath = null;
-                return;
-            }
-            
-            // 자동 새로고침
-            RefreshUIList();
-            
-            // 생성된 프리팹 선택
-            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-            if (prefab != null)
-            {
-                Selection.activeObject = prefab;
-                EditorGUIUtility.PingObject(prefab);
-            }
-            
-            // 성공 메시지 (콘솔에 로그 출력)
-            Debug.Log($"<color=green>✓</color> {className} UI가 성공적으로 생성되었습니다! (프리팹: {prefabPath})");
-            
-            EditorUtility.DisplayDialog("성공", $"{className} UI가 성공적으로 생성되었습니다!", "확인");
-            
-            // 입력 필드 초기화
-            _newUIName = "";
-            
-            // 대기 상태 초기화
-            _pendingClassName = null;
-            _pendingScriptPath = null;
-            _pendingPrefabFolderPath = null;
         }
         
         /// <summary>

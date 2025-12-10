@@ -1,4 +1,6 @@
 ﻿<Solution>
+  <Project Path="UIModule.Runtime.csproj" />
+  <Project Path="UIModule.UserScripts.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
-  <Project Path="Assembly-CSharp-Editor.csproj" />
+  <Project Path="UIModule.Editor.csproj" />
 </Solution>

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "displayName": "UI Module",
   "description": "Unity UI 모듈 - Screen과 Popup을 관리하는 UI 시스템",
-  "unity": “6000.3”,
+  "unity": "6000.3",
   "unityRelease": "0f1",
   "keywords": [
     "ui",
