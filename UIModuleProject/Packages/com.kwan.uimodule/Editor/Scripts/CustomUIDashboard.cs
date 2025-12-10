@@ -14,24 +14,20 @@ namespace UIModule.Editor
     /// </summary>
     public class CustomUIDashboard : EditorWindow
     {
-        private const string DEFAULT_FOLDER_PATH = "Assets/UIPrefabs";
-        private const string DEFAULT_PREFAB_FOLDER = "Assets/UIPrefabs";
+        private const string DEFAULT_FOLDER_PATH = "Assets/Resources/UIPrefabs";
         private const string DEFAULT_SCREEN_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Screen";
         private const string DEFAULT_POPUP_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Popup";
         
         private const string PREF_KEY_FOLDER_PATH = "CustomUIDashboard_FolderPath";
-        private const string PREF_KEY_PREFAB_FOLDER = "CustomUIDashboard_PrefabFolder";
         private const string PREF_KEY_SCREEN_SCRIPT_FOLDER = "CustomUIDashboard_ScreenScriptFolder";
         private const string PREF_KEY_POPUP_SCRIPT_FOLDER = "CustomUIDashboard_PopupScriptFolder";
         
         private string _targetFolderPath = DEFAULT_FOLDER_PATH;
-        private string _prefabFolderPath = DEFAULT_PREFAB_FOLDER;
         private string _screenScriptFolderPath = DEFAULT_SCREEN_SCRIPT_FOLDER;
         private string _popupScriptFolderPath = DEFAULT_POPUP_SCRIPT_FOLDER;
         
         private Vector2 _scrollPosition;
         private Vector2 _folderScrollPosition;
-        private Vector2 _createScrollPosition;
         
         // UI 생성 관련
         private string _newUIName = "";
@@ -92,7 +88,6 @@ namespace UIModule.Editor
         {
             // 저장된 폴더 경로 불러오기
             _targetFolderPath = EditorPrefs.GetString(PREF_KEY_FOLDER_PATH, DEFAULT_FOLDER_PATH);
-            _prefabFolderPath = EditorPrefs.GetString(PREF_KEY_PREFAB_FOLDER, DEFAULT_PREFAB_FOLDER);
             _screenScriptFolderPath = EditorPrefs.GetString(PREF_KEY_SCREEN_SCRIPT_FOLDER, DEFAULT_SCREEN_SCRIPT_FOLDER);
             _popupScriptFolderPath = EditorPrefs.GetString(PREF_KEY_POPUP_SCRIPT_FOLDER, DEFAULT_POPUP_SCRIPT_FOLDER);
             RefreshUIList();
@@ -175,9 +170,95 @@ namespace UIModule.Editor
         private void SaveFolderPaths()
         {
             EditorPrefs.SetString(PREF_KEY_FOLDER_PATH, _targetFolderPath);
-            EditorPrefs.SetString(PREF_KEY_PREFAB_FOLDER, _prefabFolderPath);
             EditorPrefs.SetString(PREF_KEY_SCREEN_SCRIPT_FOLDER, _screenScriptFolderPath);
             EditorPrefs.SetString(PREF_KEY_POPUP_SCRIPT_FOLDER, _popupScriptFolderPath);
+            
+            // ScriptableObject에도 저장 (런타임 사용을 위해)
+            SaveToScriptableObject();
+        }
+        
+        /// <summary>
+        /// UIModuleSettings ScriptableObject에 설정 저장
+        /// </summary>
+        private void SaveToScriptableObject()
+        {
+            // Resources 경로로 변환
+            string resourcesPath = ConvertToResourcesPath(_targetFolderPath);
+            if (resourcesPath == null)
+            {
+                Debug.LogWarning($"[CustomUIDashboard] 기준 폴더가 Resources 폴더 내에 있어야 합니다.\n" +
+                    $"현재 경로: {_targetFolderPath}\n" +
+                    $"예시: Assets/Resources/UIPrefabs");
+                return;
+            }
+            
+            // UIModuleSettings 에셋 찾기 또는 생성
+            string settingsAssetPath = "Assets/Resources/UIModuleSettings.asset";
+            UIModuleSettings settings = AssetDatabase.LoadAssetAtPath<UIModuleSettings>(settingsAssetPath);
+            
+            if (settings == null)
+            {
+                // Resources 폴더 확인 및 생성
+                string resourcesFolder = "Assets/Resources";
+                if (!AssetDatabase.IsValidFolder(resourcesFolder))
+                {
+                    AssetDatabase.CreateFolder("Assets", "Resources");
+                }
+                
+                // ScriptableObject 생성
+                settings = ScriptableObject.CreateInstance<UIModuleSettings>();
+                AssetDatabase.CreateAsset(settings, settingsAssetPath);
+                Debug.Log($"[CustomUIDashboard] UIModuleSettings.asset이 생성되었습니다: {settingsAssetPath}");
+            }
+            
+            // 설정 업데이트
+            settings.UpdateSettings(_targetFolderPath, resourcesPath);
+            EditorUtility.SetDirty(settings);
+            AssetDatabase.SaveAssets();
+            
+            // 캐시 초기화 (런타임에서 새로운 값을 읽도록)
+            UIModuleSettings.ClearCache();
+            
+            Debug.Log($"[CustomUIDashboard] UIModuleSettings 업데이트 완료\n" +
+                $"Assets 경로: {_targetFolderPath}\n" +
+                $"Resources 경로: {resourcesPath}");
+        }
+        
+        /// <summary>
+        /// Assets 경로를 Resources 경로로 변환
+        /// 예: "Assets/Resources/UIPrefabs" → "UIPrefabs/"
+        /// 예: "Assets/Resources" → "" (루트)
+        /// </summary>
+        private string ConvertToResourcesPath(string assetsPath)
+        {
+            if (string.IsNullOrEmpty(assetsPath))
+            {
+                return null;
+            }
+            
+            // "Assets/Resources" 정확히 일치하는 경우 (루트 폴더 선택)
+            if (assetsPath == "Assets/Resources" || assetsPath == "Assets/Resources/")
+            {
+                return ""; // Resources 루트 폴더
+            }
+            
+            // "Assets/Resources/" 이후의 경로 추출
+            const string resourcesMarker = "Resources/";
+            int resourcesIndex = assetsPath.IndexOf(resourcesMarker);
+            
+            if (resourcesIndex >= 0)
+            {
+                string relativePath = assetsPath.Substring(resourcesIndex + resourcesMarker.Length);
+                // 빈 문자열이면 루트, 아니면 끝에 슬래시 추가
+                if (string.IsNullOrEmpty(relativePath))
+                {
+                    return ""; // Resources 루트 폴더
+                }
+                return relativePath.EndsWith("/") ? relativePath : relativePath + "/";
+            }
+            
+            // Resources 폴더 내에 없으면 null 반환
+            return null;
         }
         
         private void OnGUI()
@@ -244,7 +325,13 @@ namespace UIModule.Editor
                     {
                         _targetFolderPath = "Assets" + selectedPath.Substring(Application.dataPath.Length);
                         SaveFolderPaths(); // 즉시 저장
-                        RefreshUIList();
+                        // GUI 이벤트 종료 후 지연 호출로 새로고침 (Begin/End 불일치 방지)
+                        EditorApplication.delayCall += () =>
+                        {
+                            RefreshUIList();
+                            Repaint();
+                        };
+                        GUIUtility.ExitGUI();
                     }
                     else
                     {
@@ -262,7 +349,13 @@ namespace UIModule.Editor
             
             if (GUILayout.Button("새로고침", GUILayout.Width(100)))
             {
-                RefreshUIList();
+                // GUI 이벤트 종료 후 지연 호출로 새로고침 (Begin/End 불일치 방지)
+                EditorApplication.delayCall += () =>
+                {
+                    RefreshUIList();
+                    Repaint();
+                };
+                GUIUtility.ExitGUI();
             }
             
             EditorGUILayout.EndHorizontal();
@@ -280,6 +373,9 @@ namespace UIModule.Editor
             EditorGUILayout.LabelField($"UI 목록 ({_uiList.Count}개)", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
             
+            // 스크롤뷰는 항상 Begin/End 쌍으로 실행 (GUI 에러 방지)
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
+            
             if (_isRefreshing)
             {
                 EditorGUILayout.HelpBox("UI 목록을 불러오는 중...", MessageType.Info);
@@ -294,8 +390,6 @@ namespace UIModule.Editor
             }
             else
             {
-                _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
-                
                 // Screen과 Popup 분리하여 표시
                 var screens = _uiList.Where(ui => ui.Type == UIType.Screen).ToList();
                 var popups = _uiList.Where(ui => ui.Type == UIType.Popup).ToList();
@@ -325,9 +419,9 @@ namespace UIModule.Editor
                         DrawUIItem(popup);
                     }
                 }
-                
-                EditorGUILayout.EndScrollView();
             }
+            
+            EditorGUILayout.EndScrollView();
             
             EditorGUILayout.EndVertical();
         }
@@ -383,8 +477,10 @@ namespace UIModule.Editor
                 return;
             }
             
-            // 프리팹 파일 찾기
-            string[] prefabPaths = Directory.GetFiles(_targetFolderPath, "*.prefab", SearchOption.AllDirectories)
+            // 프리팹 파일 찾기 (기준 폴더만 검색, 하위 폴더 제외)
+            // 주의: UIPoolManager에서 "prefabPathPrefix + 클래스이름"으로 로드하므로
+            //       프리팹은 기준 폴더에 직접 배치해야 함
+            string[] prefabPaths = Directory.GetFiles(_targetFolderPath, "*.prefab", SearchOption.TopDirectoryOnly)
                 .Select(path => path.Replace('\\', '/'))
                 .Where(path => path.StartsWith("Assets/"))
                 .ToArray();
@@ -492,38 +588,7 @@ namespace UIModule.Editor
                 EditorGUILayout.Space(5);
             }
             
-            // 폴더 경로 설정
-            _createScrollPosition = EditorGUILayout.BeginScrollView(
-                new Vector2(_createScrollPosition.x, 0),
-                GUILayout.Height(60)
-            );
-            
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("프리팹 폴더:", GUILayout.Width(100));
-            _prefabFolderPath = EditorGUILayout.TextField(_prefabFolderPath);
-            if (GUILayout.Button("선택", GUILayout.Width(50)))
-            {
-                // Assets 폴더부터 시작하도록 설정
-                string startPath = Application.dataPath;
-                if (!string.IsNullOrEmpty(_prefabFolderPath) && _prefabFolderPath.StartsWith("Assets/"))
-                {
-                    // 상대 경로를 절대 경로로 변환
-                    string fullPath = _prefabFolderPath.Replace("Assets", Application.dataPath);
-                    if (System.IO.Directory.Exists(fullPath))
-                    {
-                        startPath = fullPath;
-                    }
-                }
-                
-                string path = EditorUtility.OpenFolderPanel("프리팹 폴더 선택", startPath, "");
-                if (!string.IsNullOrEmpty(path) && path.StartsWith(Application.dataPath))
-                {
-                    _prefabFolderPath = "Assets" + path.Substring(Application.dataPath.Length);
-                    SaveFolderPaths(); // 즉시 저장
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-            
+            // 스크립트 폴더 경로 설정
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("스크립트 폴더:", GUILayout.Width(100));
             string scriptFolder = _isCreatingScreen ? _screenScriptFolderPath : _popupScriptFolderPath;
@@ -569,8 +634,6 @@ namespace UIModule.Editor
             }
             EditorGUILayout.EndHorizontal();
             
-            EditorGUILayout.EndScrollView();
-            
             EditorGUILayout.Space(5);
             
             // 만들기 버튼
@@ -606,8 +669,8 @@ namespace UIModule.Editor
                 return;
             }
             
-            // 현재 입력된 경로 사용 (스크립트 폴더는 타입에 따라)
-            string prefabFolder = _prefabFolderPath;
+            // 현재 입력된 경로 사용 (기준 폴더 = 프리팹 폴더, 스크립트 폴더는 타입에 따라)
+            string prefabFolder = _targetFolderPath;
             string scriptFolder = _isCreatingScreen ? _screenScriptFolderPath : _popupScriptFolderPath;
             
             // 폴더 존재 확인 및 생성

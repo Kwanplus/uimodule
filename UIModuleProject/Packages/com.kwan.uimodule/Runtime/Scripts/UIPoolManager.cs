@@ -275,12 +275,23 @@ namespace UIModule
         }
         
         /// <summary>
-        /// UIManager에서 프리팹 경로 접두사 가져오기 (매번 최신 값 가져오기)
+        /// 프리팹 경로 접두사 가져오기 (UIModuleSettings 우선, 없으면 UIManager)
+        /// 빈 문자열("")은 Resources 루트 폴더를 의미
         /// </summary>
         private string GetPrefabPathPrefix()
         {
-            // UIManager.Instance 접근 시 동적으로 생성될 수 있으므로, 
-            // 항상 최신 인스턴스를 참조하도록 함
+            // 1. UIModuleSettings에서 먼저 가져오기 (ScriptableObject)
+            if (UIModuleSettings.Instance != null)
+            {
+                string pathPrefix = UIModuleSettings.Instance.PrefabPathPrefix;
+                // null이 아니면 사용 (빈 문자열 ""은 Resources 루트 폴더를 의미하는 유효한 값)
+                if (pathPrefix != null)
+                {
+                    return pathPrefix;
+                }
+            }
+            
+            // 2. UIManager에서 가져오기 (폴백)
             if (UIManager.Instance != null)
             {
                 string pathPrefix = UIManager.Instance.GetPrefabPathPrefix();
@@ -292,8 +303,7 @@ namespace UIModule
                 }
             }
             
-            // UIManager가 없거나 경로가 비어있으면 기본값 반환
-            Debug.LogWarning("[UIPoolManager] UIManager가 없거나 프리팹 경로가 설정되지 않았습니다. 기본값 'UIPrefabs/'를 사용합니다.");
+            // 기본값 반환
             return "UIPrefabs/";
         }
     }
