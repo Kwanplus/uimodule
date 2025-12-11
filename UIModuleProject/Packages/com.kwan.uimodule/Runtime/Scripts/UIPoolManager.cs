@@ -82,14 +82,8 @@ namespace UIModule
             
             // 프리팹 로드
             string prefabName = uiType.Name;
-            // UIManager의 프리팹 경로 설정 사용 (매번 최신 값 가져오기)
             string prefabPathPrefix = GetPrefabPathPrefix();
             string prefabPath = prefabPathPrefix + prefabName;
-            
-            // 디버그 로그 (개발 중에만 표시)
-            #if UNITY_EDITOR
-            Debug.Log($"[UIPoolManager] 프리팹 로드 시도: Resources/{prefabPath}");
-            #endif
             
             GameObject prefab = Resources.Load<GameObject>(prefabPath);
             
