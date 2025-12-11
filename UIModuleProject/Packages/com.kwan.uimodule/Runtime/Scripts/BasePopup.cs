@@ -38,38 +38,32 @@ namespace UIModule
         
         protected override void OnShow()
         {
-            // PoolRoot에 있으면 레이어 Canvas로 이동
+            // 레이어 Canvas로 이동 및 RectTransform 설정
             if (UIManager.Instance != null)
             {
                 Canvas layerCanvas = UIManager.Instance.GetLayerCanvas(UILayer.Popup);
-                if (layerCanvas != null)
+                if (layerCanvas != null && transform.parent != layerCanvas.transform)
                 {
-                    // 현재 부모가 레이어 Canvas가 아니면 이동 (PoolRoot 또는 그 하위에 있을 수 있음)
-                    if (transform.parent != layerCanvas.transform)
+                    transform.SetParent(layerCanvas.transform, false);
+                    
+                    RectTransform rectTransform = GetComponent<RectTransform>();
+                    if (rectTransform != null)
                     {
-                        transform.SetParent(layerCanvas.transform, false);
-                        
-                        // RectTransform 설정 (Popup은 MiddleCenter)
-                        RectTransform rectTransform = GetComponent<RectTransform>();
-                        if (rectTransform != null)
+                        // MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
+                        if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
                         {
-                            // MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
-                            if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
+                            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                            if (rectTransform.sizeDelta == Vector2.zero)
                             {
-                                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                                if (rectTransform.sizeDelta == Vector2.zero)
-                                {
-                                    rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
-                                }
-                                rectTransform.anchoredPosition = Vector2.zero;
+                                rectTransform.sizeDelta = new Vector2(400, 300);
                             }
-                            
-                            // Scale 확인
-                            if (rectTransform.localScale == Vector3.zero)
-                            {
-                                rectTransform.localScale = Vector3.one;
-                            }
+                            rectTransform.anchoredPosition = Vector2.zero;
+                        }
+                        
+                        if (rectTransform.localScale == Vector3.zero)
+                        {
+                            rectTransform.localScale = Vector3.one;
                         }
                     }
                 }
@@ -93,10 +87,6 @@ namespace UIModule
                 if (UIPoolManager.Instance != null)
                 {
                     UIPoolManager.Instance.ReturnToPool(this);
-                }
-                else
-                {
-                    Debug.LogError("UIPoolManager.Instance가 null입니다!");
                 }
             }
         }

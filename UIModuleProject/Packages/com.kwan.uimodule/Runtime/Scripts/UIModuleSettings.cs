@@ -24,8 +24,7 @@ namespace UIModule
                     
                     if (_instance == null)
                     {
-                        Debug.LogWarning($"[UIModuleSettings] Resources/{SETTINGS_PATH}.asset 파일을 찾을 수 없습니다. " +
-                            "기본값을 사용합니다. UI Dashboard에서 폴더 설정을 변경하면 자동으로 생성됩니다.");
+                        // UI Dashboard에서 폴더 설정을 변경하면 자동으로 생성됨
                     }
                 }
                 return _instance;
@@ -85,3 +84,4 @@ namespace UIModule
         }
     }
 }
+

@@ -326,7 +326,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIModule.TestPopup
   layer: 0
-  _closeOnScreenChange: 1
+  _closeOnScreenChange: 0
   _isSingleton: 0
   _buttonConfirm: {fileID: 7914131351958246057}
   _buttonClose: {fileID: 3324213931048475976}

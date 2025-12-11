@@ -478,8 +478,8 @@ namespace UIModule.Editor
             }
             
             // 프리팹 파일 찾기 (기준 폴더만 검색, 하위 폴더 제외)
-            // 주의: UIPoolManager에서 "prefabPathPrefix + 클래스이름"으로 로드하므로
-            //       프리팹은 기준 폴더에 직접 배치해야 함
+            // UIPoolManager에서 "prefabPathPrefix + 클래스이름"으로 로드하므로
+            // 프리팹은 기준 폴더에 직접 배치해야 함
             string[] prefabPaths = Directory.GetFiles(_targetFolderPath, "*.prefab", SearchOption.TopDirectoryOnly)
                 .Select(path => path.Replace('\\', '/'))
                 .Where(path => path.StartsWith("Assets/"))
@@ -1018,7 +1018,6 @@ namespace UIModule.Editor
                 sb.AppendLine("        private void OnButtonConfirmClicked()");
                 sb.AppendLine("        {");
                 sb.AppendLine("            // 확인 버튼 로직");
-                sb.AppendLine("            Debug.Log(\"Confirm button clicked\");");
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 sb.AppendLine("        /// <summary>");
@@ -1239,10 +1238,9 @@ namespace UIModule.Editor
                 }
             }
             
-            // 임시 GameObject 제거
             DestroyImmediate(prefabGO);
             
-            // Popup인 경우 프리팹 에셋에 옵션 값 설정 (프리팹에 Serialize되도록)
+            // Popup 옵션 값 설정
             if (!_isCreatingScreen && prefab != null)
             {
                 BasePopup popupComponent = prefab.GetComponent<BasePopup>();

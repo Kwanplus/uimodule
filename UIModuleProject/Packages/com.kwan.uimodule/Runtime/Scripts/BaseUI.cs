@@ -30,7 +30,7 @@ namespace UIModule
         /// </summary>
         public virtual void Initialize()
         {
-            if (IsInitialized) return; // 중복 초기화 방지
+            if (IsInitialized) return;
             
             IsActive = false;
             IsInitialized = true;
@@ -44,7 +44,6 @@ namespace UIModule
         {
             if (IsActive) return;
             
-            // 초기화가 안 되어있으면 먼저 초기화
             if (!IsInitialized)
             {
                 Initialize();
@@ -65,8 +64,8 @@ namespace UIModule
             IsActive = false;
             OnHide();
             
-            // Pooling으로 관리되지 않는 경우에만 비활성화
-            // Pooling으로 관리되는 경우 OnHide()에서 풀로 반환하면서 비활성화됨
+            // Pooling 사용 시 OnHide()에서 풀로 반환되며 비활성화됨
+            // Pooling 미사용 시에만 여기서 비활성화
             if (gameObject.activeSelf)
             {
                 gameObject.SetActive(false);
@@ -82,7 +81,9 @@ namespace UIModule
             Destroy(gameObject);
         }
         
-        // 추상 메서드 - 하위 클래스에서 반드시 구현해야 함
+        /// <summary>
+        /// 하위 클래스에서 구현해야 하는 추상 메서드들
+        /// </summary>
         protected abstract void OnInitialize();
         protected abstract void OnShow();
         protected abstract void OnHide();
