@@ -179,7 +179,8 @@ namespace UIModule
         /// <summary>
         /// Screen 표시 (스택에 추가, 기존 Screen은 숨김)
         /// </summary>
-        public void ShowScreen<T>() where T : BaseScreen
+        /// <returns>생성된 Screen 인스턴스</returns>
+        public T ShowScreen<T>() where T : BaseScreen
         {
             System.Type screenType = typeof(T);
             
@@ -222,6 +223,8 @@ namespace UIModule
                 _screenStack.Push(newScreen);
                 newScreen.Show();
             }
+            
+            return newScreen;
         }
         
         /// <summary>
@@ -316,6 +319,7 @@ namespace UIModule
         /// <summary>
         /// Popup 표시 (스택에 추가)
         /// </summary>
+        /// <returns>생성된 Popup 인스턴스</returns>
         public T ShowPopup<T>() where T : BasePopup
         {
             System.Type popupType = typeof(T);
