@@ -51,6 +51,13 @@ namespace UIModule
         [Header("Pooling 설정")]
         [SerializeField] private bool _usePooling = true;
         
+        // Canvas Scaler 설정
+        [Header("Canvas Scaler 설정")]
+        [SerializeField] private CanvasScaler.ScaleMode _uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        [SerializeField] private Vector2 _referenceResolution = new Vector2(1920, 1080);
+        [SerializeField] [Range(0f, 1f)] private float _matchWidthOrHeight = 0.5f;
+        [SerializeField] private CanvasScaler.ScreenMatchMode _screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        
         // 레이어별 Sorting Order 설정
         private const int BASE_SORTING_ORDER = 100;
         
@@ -155,9 +162,10 @@ namespace UIModule
             canvas.sortingOrder = sortingOrder;
             
             CanvasScaler scaler = canvasGO.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.uiScaleMode = _uiScaleMode;
+            scaler.referenceResolution = _referenceResolution;
+            scaler.matchWidthOrHeight = _matchWidthOrHeight;
+            scaler.screenMatchMode = _screenMatchMode;
             
             canvasGO.AddComponent<GraphicRaycaster>();
             

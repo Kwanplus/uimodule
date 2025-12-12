@@ -414,6 +414,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UIModule.UIManager
   _prefabPathPrefix: UIPrefabs/
+  _usePooling: 1
+  _uiScaleMode: 1
+  _referenceResolution: {x: 1920, y: 1080}
+  _matchWidthOrHeight: 0
+  _screenMatchMode: 0
 --- !u!224 &1722244279
 RectTransform:
   m_ObjectHideFlags: 0
