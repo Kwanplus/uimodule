@@ -49,9 +49,10 @@ namespace UIModule
                 Initialize();
             }
             
+            // OnShow를 먼저 호출하여 레이어 이동 및 RectTransform 설정을 완료한 후 활성화
+            OnShow();
             gameObject.SetActive(true);
             IsActive = true;
-            OnShow();
         }
         
         /// <summary>
