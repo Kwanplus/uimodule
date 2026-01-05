@@ -21,7 +21,8 @@ namespace UIModule
         
         protected override void OnShow()
         {
-            // 레이어 Canvas로 이동 및 RectTransform 설정
+            // 레이어 Canvas로 이동 및 RectTransform 설정만 수행
+            // OnScreenBegin은 UIManager.ShowScreen에서 호출됨
             if (UIManager.Instance != null)
             {
                 Canvas layerCanvas = UIManager.Instance.GetLayerCanvas(UILayer.Screen);
@@ -44,8 +45,14 @@ namespace UIModule
                     }
                 }
             }
-            
-            OnScreenShow();
+        }
+        
+        /// <summary>
+        /// UIManager에서 ShowScreen 작업이 완료된 후 호출
+        /// </summary>
+        public void NotifyScreenBegin()
+        {
+            OnScreenBegin();
         }
         
         protected override void OnHide()
@@ -69,7 +76,11 @@ namespace UIModule
         
         // Screen 전용 추상 메서드
         protected abstract void OnScreenInitialize();
-        protected abstract void OnScreenShow();
+        /// <summary>
+        /// Screen 표시 완료 후 호출 (ShowScreen 작업이 모두 완료된 상태)
+        /// 이 시점에서 팝업을 띄워도 안전합니다.
+        /// </summary>
+        protected abstract void OnScreenBegin();
         protected abstract void OnScreenHide();
         protected abstract void OnScreenDestroy();
     }

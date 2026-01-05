@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UIModule;
 
 namespace UIModule
@@ -28,7 +28,7 @@ namespace UIModule
             // 초기화 로직
         }
 
-        protected override void OnScreenShow()
+        protected override void OnScreenBegin()
         {
             // 표시 시 로직
         }

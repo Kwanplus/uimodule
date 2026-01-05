@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UIModule;
 
 namespace UIModule
@@ -32,7 +32,7 @@ namespace UIModule
             }
         }
 
-        protected override void OnScreenShow()
+        protected override void OnScreenBegin()
         {
             // 표시 시 로직
         }

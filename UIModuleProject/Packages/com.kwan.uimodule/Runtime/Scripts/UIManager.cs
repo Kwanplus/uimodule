@@ -230,6 +230,7 @@ namespace UIModule
                 ClosePopupsOnScreenChange();
                 _screenStack.Push(newScreen);
                 newScreen.Show();
+                newScreen.NotifyScreenBegin();
             }
             
             return newScreen;
