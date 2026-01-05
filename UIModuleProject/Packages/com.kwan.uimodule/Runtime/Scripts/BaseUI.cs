@@ -60,6 +60,9 @@ namespace UIModule
         /// </summary>
         public virtual void Hide()
         {
+            // 디버깅: Hide() 호출 시 스택 추적
+            Debug.Log($"[{GetType().Name}] Hide() 호출됨. IsActive={IsActive}\n{System.Environment.StackTrace}");
+            
             if (!IsActive) return;
             
             IsActive = false;
