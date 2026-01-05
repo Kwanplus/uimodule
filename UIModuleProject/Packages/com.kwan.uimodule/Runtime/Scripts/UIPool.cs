@@ -79,14 +79,14 @@ namespace UIModule
             
             if (instance != null && instance.gameObject != null)
             {
-            // PoolRoot에 위치하도록 설정 (GetFromPool에서 레이어 Canvas로 이동됨)
-            if (instance.transform.parent != _parent)
-            {
-                instance.transform.SetParent(_parent, false);
-            }
+                // PoolRoot에 위치하도록 설정 (GetFromPool에서 레이어 Canvas로 이동됨)
+                if (instance.transform.parent != _parent)
+                {
+                    instance.transform.SetParent(_parent, false);
+                }
                 
                 _activeInstances.Add(instance);
-                instance.gameObject.SetActive(true);
+                // SetActive는 BaseUI.Show()에서 호출됨 (올바른 위치로 이동한 후)
                 return instance as T;
             }
             
