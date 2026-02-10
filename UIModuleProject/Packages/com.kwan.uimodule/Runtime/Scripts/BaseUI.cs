@@ -84,6 +84,89 @@ namespace UIModule
             OnDestroy();
             Destroy(gameObject);
         }
+
+        /// <summary>
+        /// 현재 UI를 지정한 레이어 Canvas에 배치하고 RectTransform을 반환
+        /// </summary>
+        protected bool TryAttachToLayerCanvas(UILayer targetLayer, out RectTransform rectTransform)
+        {
+            rectTransform = GetComponent<RectTransform>();
+            if (UIManager.Instance == null)
+            {
+                return false;
+            }
+
+            Canvas layerCanvas = UIManager.Instance.GetLayerCanvas(targetLayer);
+            if (layerCanvas == null)
+            {
+                return false;
+            }
+
+            if (transform.parent != layerCanvas.transform)
+            {
+                transform.SetParent(layerCanvas.transform, false);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 전체 화면 Stretch RectTransform 적용
+        /// </summary>
+        protected static void ApplyStretchRect(RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            rectTransform.anchorMin = Vector2.zero;
+            rectTransform.anchorMax = Vector2.one;
+            rectTransform.sizeDelta = Vector2.zero;
+            rectTransform.anchoredPosition = Vector2.zero;
+            EnsureValidScale(rectTransform);
+        }
+
+        /// <summary>
+        /// Popup 기본 가운데 정렬 RectTransform 적용
+        /// </summary>
+        protected static void ApplyPopupCenterRect(RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
+            {
+                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                if (rectTransform.sizeDelta == Vector2.zero)
+                {
+                    rectTransform.sizeDelta = new Vector2(400, 300);
+                }
+
+                rectTransform.anchoredPosition = Vector2.zero;
+            }
+
+            EnsureValidScale(rectTransform);
+        }
+
+        /// <summary>
+        /// RectTransform scale이 0으로 깨졌을 때 기본값으로 복원
+        /// </summary>
+        protected static void EnsureValidScale(RectTransform rectTransform)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (rectTransform.localScale == Vector3.zero)
+            {
+                rectTransform.localScale = Vector3.one;
+            }
+        }
         
         /// <summary>
         /// 하위 클래스에서 구현해야 하는 추상 메서드들

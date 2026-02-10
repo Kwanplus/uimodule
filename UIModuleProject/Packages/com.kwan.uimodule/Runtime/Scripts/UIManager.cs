@@ -44,6 +44,9 @@ namespace UIModule
         // UI 인스턴스 캐시 (타입별로 관리)
         private Dictionary<System.Type, BaseUI> _uiInstanceCache = new Dictionary<System.Type, BaseUI>();
         
+        // Background/Overlay/System은 타입당 1개 재사용을 보장하기 위한 캐시
+        private Dictionary<System.Type, BaseUI> _singlePerTypeLayerCache = new Dictionary<System.Type, BaseUI>();
+        
         // 프리팹 경로 설정 (기본값: Resources/UIPrefabs)
         [SerializeField] private string _prefabPathPrefix = "UIPrefabs/";
         
@@ -363,6 +366,30 @@ namespace UIModule
             }
             return newPopup;
         }
+
+        /// <summary>
+        /// Background 표시 (타입당 1개 재사용)
+        /// </summary>
+        public T ShowBackground<T>() where T : BaseBackground
+        {
+            return ShowSinglePerTypeLayer<T>(UILayer.Background);
+        }
+
+        /// <summary>
+        /// Overlay 표시 (타입당 1개 재사용)
+        /// </summary>
+        public T ShowOverlay<T>() where T : BaseOverlay
+        {
+            return ShowSinglePerTypeLayer<T>(UILayer.Overlay);
+        }
+
+        /// <summary>
+        /// System 표시 (타입당 1개 재사용)
+        /// </summary>
+        public T ShowSystem<T>() where T : BaseSystem
+        {
+            return ShowSinglePerTypeLayer<T>(UILayer.System);
+        }
         
         /// <summary>
         /// 가장 위의 Popup 닫기 (Back 키 처리)
@@ -429,6 +456,37 @@ namespace UIModule
         {
             return FindOrCreateUIByType(typeof(T), targetLayer) as T;
         }
+
+        /// <summary>
+        /// Background/Overlay/System 레이어를 타입당 1개 인스턴스로 표시
+        /// </summary>
+        private T ShowSinglePerTypeLayer<T>(UILayer targetLayer) where T : BaseUI
+        {
+            System.Type uiType = typeof(T);
+            if (_singlePerTypeLayerCache.TryGetValue(uiType, out BaseUI cachedUI))
+            {
+                if (cachedUI != null && cachedUI.gameObject != null)
+                {
+                    if (!cachedUI.IsActive)
+                    {
+                        cachedUI.Show();
+                    }
+
+                    return cachedUI as T;
+                }
+
+                _singlePerTypeLayerCache.Remove(uiType);
+            }
+
+            T ui = FindOrCreateUI<T>(targetLayer);
+            if (ui != null)
+            {
+                _singlePerTypeLayerCache[uiType] = ui;
+                ui.Show();
+            }
+
+            return ui;
+        }
         
         /// <summary>
         /// UI 찾기 또는 생성 (System.Type 버전)
@@ -441,8 +499,7 @@ namespace UIModule
                 BaseUI pooledInstance = UIPoolManager.Instance.GetFromPool(uiType, targetLayer);
                 if (pooledInstance != null)
                 {
-                    // Screen의 경우 캐시에 저장 (참조용)
-                    if (targetLayer == UILayer.Screen)
+                    if (targetLayer == UILayer.Screen || IsSinglePerTypeLayer(targetLayer))
                     {
                         _uiInstanceCache[uiType] = pooledInstance;
                     }
@@ -462,6 +519,8 @@ namespace UIModule
                     {
                         cachedUI.transform.SetParent(targetCanvas.transform, false);
                     }
+
+                    ConfigureRectTransform(cachedUI.GetComponent<RectTransform>(), targetLayer);
                     return cachedUI;
                 }
                 else
@@ -499,6 +558,8 @@ namespace UIModule
                 {
                     existingUI.transform.SetParent(targetCanvas.transform, false);
                 }
+
+                ConfigureRectTransform(existingUI.GetComponent<RectTransform>(), targetLayer);
                 _uiInstanceCache[uiType] = existingUI;
                 return existingUI;
             }
@@ -584,39 +645,7 @@ namespace UIModule
             
             // RectTransform Scale 확인 및 수정 (0,0,0이면 1,1,1로 변경)
             RectTransform rectTransform = instance.GetComponent<RectTransform>();
-            if (rectTransform != null)
-            {
-                Vector3 scale = rectTransform.localScale;
-                if (scale.x == 0 && scale.y == 0 && scale.z == 0)
-                {
-                    rectTransform.localScale = Vector3.one;
-                }
-                
-                // Screen은 Stretch, Popup은 MiddleCenter로 설정
-                if (targetLayer == UILayer.Screen)
-                {
-                    // Screen: 전체 화면을 채우도록 설정
-                    rectTransform.anchorMin = Vector2.zero;
-                    rectTransform.anchorMax = Vector2.one;
-                    rectTransform.sizeDelta = Vector2.zero;
-                    rectTransform.anchoredPosition = Vector2.zero;
-                }
-                else if (targetLayer == UILayer.Popup)
-                {
-                    // Popup: MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
-                    // anchor가 이미 설정되어 있으면 변경하지 않음
-                    if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-                    {
-                        rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                        rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                        if (rectTransform.sizeDelta == Vector2.zero)
-                        {
-                            rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
-                        }
-                        rectTransform.anchoredPosition = Vector2.zero;
-                    }
-                }
-            }
+            ConfigureRectTransform(rectTransform, targetLayer);
             
             return uiComponent;
         }
@@ -680,41 +709,54 @@ namespace UIModule
             
             // RectTransform Scale 확인 및 수정 (0,0,0이면 1,1,1로 변경)
             RectTransform rectTransform = instance.GetComponent<RectTransform>();
-            if (rectTransform != null)
-            {
-                Vector3 scale = rectTransform.localScale;
-                if (scale.x == 0 && scale.y == 0 && scale.z == 0)
-                {
-                    rectTransform.localScale = Vector3.one;
-                }
-                
-                // Screen은 Stretch, Popup은 MiddleCenter로 설정
-                if (targetLayer == UILayer.Screen)
-                {
-                    // Screen: 전체 화면을 채우도록 설정
-                    rectTransform.anchorMin = Vector2.zero;
-                    rectTransform.anchorMax = Vector2.one;
-                    rectTransform.sizeDelta = Vector2.zero;
-                    rectTransform.anchoredPosition = Vector2.zero;
-                }
-                else if (targetLayer == UILayer.Popup)
-                {
-                    // Popup: MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
-                    // anchor가 이미 설정되어 있으면 변경하지 않음
-                    if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-                    {
-                        rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                        rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                        if (rectTransform.sizeDelta == Vector2.zero)
-                        {
-                            rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
-                        }
-                        rectTransform.anchoredPosition = Vector2.zero;
-                    }
-                }
-            }
+            ConfigureRectTransform(rectTransform, targetLayer);
             
             return uiComponent;
+        }
+
+        /// <summary>
+        /// 단일 재사용 정책을 적용하는 레이어인지 반환
+        /// </summary>
+        private bool IsSinglePerTypeLayer(UILayer layer)
+        {
+            return layer == UILayer.Background || layer == UILayer.Overlay || layer == UILayer.System;
+        }
+
+        /// <summary>
+        /// 레이어별 RectTransform 규칙 적용
+        /// </summary>
+        private void ConfigureRectTransform(RectTransform rectTransform, UILayer targetLayer)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (rectTransform.localScale == Vector3.zero)
+            {
+                rectTransform.localScale = Vector3.one;
+            }
+
+            if (targetLayer == UILayer.Screen || targetLayer == UILayer.Background || targetLayer == UILayer.Overlay || targetLayer == UILayer.System)
+            {
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.sizeDelta = Vector2.zero;
+                rectTransform.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            if (targetLayer == UILayer.Popup && rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
+            {
+                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                if (rectTransform.sizeDelta == Vector2.zero)
+                {
+                    rectTransform.sizeDelta = new Vector2(400, 300);
+                }
+
+                rectTransform.anchoredPosition = Vector2.zero;
+            }
         }
         
         /// <summary>

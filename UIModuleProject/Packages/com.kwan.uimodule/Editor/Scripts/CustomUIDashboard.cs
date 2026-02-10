@@ -17,21 +17,30 @@ namespace UIModule.Editor
         private const string DEFAULT_FOLDER_PATH = "Assets/Resources/UIPrefabs";
         private const string DEFAULT_SCREEN_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Screen";
         private const string DEFAULT_POPUP_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Popup";
+        private const string DEFAULT_BACKGROUND_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Background";
+        private const string DEFAULT_OVERLAY_SCRIPT_FOLDER = "Assets/Scripts/UIModule/Overlay";
+        private const string DEFAULT_SYSTEM_SCRIPT_FOLDER = "Assets/Scripts/UIModule/System";
         
         private const string PREF_KEY_FOLDER_PATH = "CustomUIDashboard_FolderPath";
         private const string PREF_KEY_SCREEN_SCRIPT_FOLDER = "CustomUIDashboard_ScreenScriptFolder";
         private const string PREF_KEY_POPUP_SCRIPT_FOLDER = "CustomUIDashboard_PopupScriptFolder";
+        private const string PREF_KEY_BACKGROUND_SCRIPT_FOLDER = "CustomUIDashboard_BackgroundScriptFolder";
+        private const string PREF_KEY_OVERLAY_SCRIPT_FOLDER = "CustomUIDashboard_OverlayScriptFolder";
+        private const string PREF_KEY_SYSTEM_SCRIPT_FOLDER = "CustomUIDashboard_SystemScriptFolder";
         
         private string _targetFolderPath = DEFAULT_FOLDER_PATH;
         private string _screenScriptFolderPath = DEFAULT_SCREEN_SCRIPT_FOLDER;
         private string _popupScriptFolderPath = DEFAULT_POPUP_SCRIPT_FOLDER;
+        private string _backgroundScriptFolderPath = DEFAULT_BACKGROUND_SCRIPT_FOLDER;
+        private string _overlayScriptFolderPath = DEFAULT_OVERLAY_SCRIPT_FOLDER;
+        private string _systemScriptFolderPath = DEFAULT_SYSTEM_SCRIPT_FOLDER;
         
         private Vector2 _scrollPosition;
         private Vector2 _folderScrollPosition;
         
         // UI 생성 관련
         private string _newUIName = "";
-        private bool _isCreatingScreen = true; // true: Screen, false: Popup
+        private CreateUIType _createUIType = CreateUIType.Screen;
         
         // Popup 옵션 (팝업 선택 시에만 사용)
         private enum PopupCloseOnScreenChange
@@ -60,10 +69,22 @@ namespace UIModule.Editor
         private double _compilationStartTime = 0;
         private const double COMPILATION_TIMEOUT = 30.0; // 30초 타임아웃
         
-        private enum UIType
+        private enum CreateUIType
         {
+            Background,
             Screen,
             Popup,
+            Overlay,
+            System
+        }
+
+        private enum UIType
+        {
+            Background,
+            Screen,
+            Popup,
+            Overlay,
+            System,
             Unknown
         }
         
@@ -90,6 +111,9 @@ namespace UIModule.Editor
             _targetFolderPath = EditorPrefs.GetString(PREF_KEY_FOLDER_PATH, DEFAULT_FOLDER_PATH);
             _screenScriptFolderPath = EditorPrefs.GetString(PREF_KEY_SCREEN_SCRIPT_FOLDER, DEFAULT_SCREEN_SCRIPT_FOLDER);
             _popupScriptFolderPath = EditorPrefs.GetString(PREF_KEY_POPUP_SCRIPT_FOLDER, DEFAULT_POPUP_SCRIPT_FOLDER);
+            _backgroundScriptFolderPath = EditorPrefs.GetString(PREF_KEY_BACKGROUND_SCRIPT_FOLDER, DEFAULT_BACKGROUND_SCRIPT_FOLDER);
+            _overlayScriptFolderPath = EditorPrefs.GetString(PREF_KEY_OVERLAY_SCRIPT_FOLDER, DEFAULT_OVERLAY_SCRIPT_FOLDER);
+            _systemScriptFolderPath = EditorPrefs.GetString(PREF_KEY_SYSTEM_SCRIPT_FOLDER, DEFAULT_SYSTEM_SCRIPT_FOLDER);
             RefreshUIList();
             
             // EditorApplication.update 등록
@@ -172,6 +196,9 @@ namespace UIModule.Editor
             EditorPrefs.SetString(PREF_KEY_FOLDER_PATH, _targetFolderPath);
             EditorPrefs.SetString(PREF_KEY_SCREEN_SCRIPT_FOLDER, _screenScriptFolderPath);
             EditorPrefs.SetString(PREF_KEY_POPUP_SCRIPT_FOLDER, _popupScriptFolderPath);
+            EditorPrefs.SetString(PREF_KEY_BACKGROUND_SCRIPT_FOLDER, _backgroundScriptFolderPath);
+            EditorPrefs.SetString(PREF_KEY_OVERLAY_SCRIPT_FOLDER, _overlayScriptFolderPath);
+            EditorPrefs.SetString(PREF_KEY_SYSTEM_SCRIPT_FOLDER, _systemScriptFolderPath);
             
             // ScriptableObject에도 저장 (런타임 사용을 위해)
             SaveToScriptableObject();
@@ -384,41 +411,17 @@ namespace UIModule.Editor
             {
                 EditorGUILayout.HelpBox(
                     "UI를 찾을 수 없습니다.\n" +
-                    "기준 폴더에 BaseScreen 또는 BasePopup을 상속받은 컴포넌트가 있는 프리팹이 있는지 확인하세요.",
+                    "기준 폴더에 BaseUI 파생 컴포넌트가 있는 프리팹이 있는지 확인하세요.",
                     MessageType.Warning
                 );
             }
             else
             {
-                // Screen과 Popup 분리하여 표시
-                var screens = _uiList.Where(ui => ui.Type == UIType.Screen).ToList();
-                var popups = _uiList.Where(ui => ui.Type == UIType.Popup).ToList();
-                
-                // Screen 섹션
-                if (screens.Count > 0)
-                {
-                    EditorGUILayout.LabelField($"Screen ({screens.Count}개)", EditorStyles.boldLabel);
-                    EditorGUILayout.Space(3);
-                    
-                    foreach (var screen in screens)
-                    {
-                        DrawUIItem(screen);
-                    }
-                    
-                    EditorGUILayout.Space(10);
-                }
-                
-                // Popup 섹션
-                if (popups.Count > 0)
-                {
-                    EditorGUILayout.LabelField($"Popup ({popups.Count}개)", EditorStyles.boldLabel);
-                    EditorGUILayout.Space(3);
-                    
-                    foreach (var popup in popups)
-                    {
-                        DrawUIItem(popup);
-                    }
-                }
+                DrawUISection(UIType.Background, "Background");
+                DrawUISection(UIType.Screen, "Screen");
+                DrawUISection(UIType.Popup, "Popup");
+                DrawUISection(UIType.Overlay, "Overlay");
+                DrawUISection(UIType.System, "System");
             }
             
             EditorGUILayout.EndScrollView();
@@ -434,9 +437,9 @@ namespace UIModule.Editor
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             
             // 타입 아이콘/라벨
-            string typeLabel = uiInfo.Type == UIType.Screen ? "[Screen]" : "[Popup]";
+            string typeLabel = $"[{uiInfo.Type}]";
             Color originalColor = GUI.color;
-            GUI.color = uiInfo.Type == UIType.Screen ? Color.cyan : Color.yellow;
+            GUI.color = GetTypeColor(uiInfo.Type);
             EditorGUILayout.LabelField(typeLabel, GUILayout.Width(70));
             GUI.color = originalColor;
             
@@ -461,6 +464,49 @@ namespace UIModule.Editor
             }
             
             EditorGUILayout.EndHorizontal();
+        }
+
+        /// <summary>
+        /// 특정 타입 UI 섹션 그리기
+        /// </summary>
+        private void DrawUISection(UIType type, string displayName)
+        {
+            List<UIInfo> items = _uiList.Where(ui => ui.Type == type).ToList();
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            EditorGUILayout.LabelField($"{displayName} ({items.Count}개)", EditorStyles.boldLabel);
+            EditorGUILayout.Space(3);
+            foreach (UIInfo item in items)
+            {
+                DrawUIItem(item);
+            }
+
+            EditorGUILayout.Space(10);
+        }
+
+        /// <summary>
+        /// UI 타입별 표시 색상 반환
+        /// </summary>
+        private Color GetTypeColor(UIType type)
+        {
+            switch (type)
+            {
+                case UIType.Background:
+                    return new Color(0.6f, 0.9f, 0.6f);
+                case UIType.Screen:
+                    return Color.cyan;
+                case UIType.Popup:
+                    return Color.yellow;
+                case UIType.Overlay:
+                    return new Color(1.0f, 0.6f, 0.8f);
+                case UIType.System:
+                    return new Color(1.0f, 0.5f, 0.5f);
+                default:
+                    return Color.white;
+            }
         }
         
         /// <summary>
@@ -522,13 +568,25 @@ namespace UIModule.Editor
         /// </summary>
         private UIType DetermineUIType(BaseUI uiComponent)
         {
-            if (uiComponent is BaseScreen)
+            if (uiComponent is BaseBackground)
+            {
+                return UIType.Background;
+            }
+            else if (uiComponent is BaseScreen)
             {
                 return UIType.Screen;
             }
             else if (uiComponent is BasePopup)
             {
                 return UIType.Popup;
+            }
+            else if (uiComponent is BaseOverlay)
+            {
+                return UIType.Overlay;
+            }
+            else if (uiComponent is BaseSystem)
+            {
+                return UIType.System;
             }
             else
             {
@@ -557,14 +615,13 @@ namespace UIModule.Editor
             // 타입 선택
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("타입:", GUILayout.Width(80));
-            _isCreatingScreen = EditorGUILayout.ToggleLeft("Screen", _isCreatingScreen, GUILayout.Width(80));
-            _isCreatingScreen = !EditorGUILayout.ToggleLeft("Popup", !_isCreatingScreen, GUILayout.Width(80));
+            _createUIType = (CreateUIType)EditorGUILayout.EnumPopup(_createUIType);
             EditorGUILayout.EndHorizontal();
             
             EditorGUILayout.Space(5);
             
             // Popup 옵션 (팝업 선택 시에만 표시)
-            if (!_isCreatingScreen)
+            if (IsPopupType(_createUIType))
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField("팝업 옵션", EditorStyles.boldLabel);
@@ -591,19 +648,12 @@ namespace UIModule.Editor
             // 스크립트 폴더 경로 설정
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("스크립트 폴더:", GUILayout.Width(100));
-            string scriptFolder = _isCreatingScreen ? _screenScriptFolderPath : _popupScriptFolderPath;
+            string scriptFolder = GetCurrentScriptFolderPath(_createUIType);
             scriptFolder = EditorGUILayout.TextField(scriptFolder);
-            if (_isCreatingScreen)
-            {
-                _screenScriptFolderPath = scriptFolder;
-            }
-            else
-            {
-                _popupScriptFolderPath = scriptFolder;
-            }
+            SetCurrentScriptFolderPath(_createUIType, scriptFolder);
             if (GUILayout.Button("선택", GUILayout.Width(50)))
             {
-                string currentPath = _isCreatingScreen ? _screenScriptFolderPath : _popupScriptFolderPath;
+                string currentPath = GetCurrentScriptFolderPath(_createUIType);
                 
                 // Assets 폴더부터 시작하도록 설정
                 string startPath = Application.dataPath;
@@ -621,14 +671,7 @@ namespace UIModule.Editor
                 if (!string.IsNullOrEmpty(path) && path.StartsWith(Application.dataPath))
                 {
                     string newPath = "Assets" + path.Substring(Application.dataPath.Length);
-                    if (_isCreatingScreen)
-                    {
-                        _screenScriptFolderPath = newPath;
-                    }
-                    else
-                    {
-                        _popupScriptFolderPath = newPath;
-                    }
+                    SetCurrentScriptFolderPath(_createUIType, newPath);
                     SaveFolderPaths(); // 즉시 저장
                 }
             }
@@ -671,7 +714,7 @@ namespace UIModule.Editor
             
             // 현재 입력된 경로 사용 (기준 폴더 = 프리팹 폴더, 스크립트 폴더는 타입에 따라)
             string prefabFolder = _targetFolderPath;
-            string scriptFolder = _isCreatingScreen ? _screenScriptFolderPath : _popupScriptFolderPath;
+            string scriptFolder = GetCurrentScriptFolderPath(_createUIType);
             
             // 폴더 존재 확인 및 생성
             if (!Directory.Exists(prefabFolder))
@@ -876,7 +919,11 @@ namespace UIModule.Editor
                     foreach (var type in types)
                     {
                         if (type.Name == className && 
-                            (type.IsSubclassOf(typeof(BaseScreen)) || type.IsSubclassOf(typeof(BasePopup))))
+                            (type.IsSubclassOf(typeof(BaseBackground)) ||
+                             type.IsSubclassOf(typeof(BaseScreen)) ||
+                             type.IsSubclassOf(typeof(BasePopup)) ||
+                             type.IsSubclassOf(typeof(BaseOverlay)) ||
+                             type.IsSubclassOf(typeof(BaseSystem))))
                         {
                             return type;
                         }
@@ -909,6 +956,61 @@ namespace UIModule.Editor
             
             return true;
         }
+
+        /// <summary>
+        /// 현재 선택된 UI 타입이 Popup인지 확인
+        /// </summary>
+        private bool IsPopupType(CreateUIType uiType)
+        {
+            return uiType == CreateUIType.Popup;
+        }
+
+        /// <summary>
+        /// UI 타입별 스크립트 폴더 경로 조회
+        /// </summary>
+        private string GetCurrentScriptFolderPath(CreateUIType uiType)
+        {
+            switch (uiType)
+            {
+                case CreateUIType.Background:
+                    return _backgroundScriptFolderPath;
+                case CreateUIType.Popup:
+                    return _popupScriptFolderPath;
+                case CreateUIType.Overlay:
+                    return _overlayScriptFolderPath;
+                case CreateUIType.System:
+                    return _systemScriptFolderPath;
+                case CreateUIType.Screen:
+                default:
+                    return _screenScriptFolderPath;
+            }
+        }
+
+        /// <summary>
+        /// UI 타입별 스크립트 폴더 경로 저장
+        /// </summary>
+        private void SetCurrentScriptFolderPath(CreateUIType uiType, string path)
+        {
+            switch (uiType)
+            {
+                case CreateUIType.Background:
+                    _backgroundScriptFolderPath = path;
+                    break;
+                case CreateUIType.Popup:
+                    _popupScriptFolderPath = path;
+                    break;
+                case CreateUIType.Overlay:
+                    _overlayScriptFolderPath = path;
+                    break;
+                case CreateUIType.System:
+                    _systemScriptFolderPath = path;
+                    break;
+                case CreateUIType.Screen:
+                default:
+                    _screenScriptFolderPath = path;
+                    break;
+            }
+        }
         
         /// <summary>
         /// 스크립트 생성
@@ -925,7 +1027,7 @@ namespace UIModule.Editor
                 }
             }
             
-            string scriptContent = GenerateScriptContent(className, _isCreatingScreen);
+            string scriptContent = GenerateScriptContent(className, _createUIType);
             
             try
             {
@@ -942,7 +1044,7 @@ namespace UIModule.Editor
         /// <summary>
         /// 스크립트 내용 생성
         /// </summary>
-        private string GenerateScriptContent(string className, bool isScreen)
+        private string GenerateScriptContent(string className, CreateUIType uiType)
         {
             StringBuilder sb = new StringBuilder();
             
@@ -952,13 +1054,13 @@ namespace UIModule.Editor
             sb.AppendLine("namespace UIModule");
             sb.AppendLine("{");
             sb.AppendLine($"    /// <summary>");
-            sb.AppendLine($"    /// {className} {(isScreen ? "Screen" : "Popup")}");
+            sb.AppendLine($"    /// {className} {uiType}");
             sb.AppendLine($"    /// </summary>");
-            sb.AppendLine($"    public class {className} : {(isScreen ? "BaseScreen" : "BasePopup")}");
+            sb.AppendLine($"    public class {className} : {GetBaseTypeName(uiType)}");
             sb.AppendLine("    {");
             sb.AppendLine("        // UI 요소 참조");
             sb.AppendLine("        [SerializeField] private UIButton _buttonConfirm;");
-            if (isScreen)
+            if (uiType == CreateUIType.Screen)
             {
                 sb.AppendLine("        [SerializeField] private UIButton _buttonBack;");
             }
@@ -968,7 +1070,7 @@ namespace UIModule.Editor
             }
             sb.AppendLine();
             
-            if (isScreen)
+            if (uiType == CreateUIType.Screen)
             {
                 sb.AppendLine("        protected override void OnScreenInitialize()");
                 sb.AppendLine("        {");
@@ -986,7 +1088,7 @@ namespace UIModule.Editor
                 sb.AppendLine("            // 초기화 로직");
                 sb.AppendLine("        }");
                 sb.AppendLine();
-                sb.AppendLine("        protected override void OnScreenShow()");
+                sb.AppendLine("        protected override void OnScreenBegin()");
                 sb.AppendLine("        {");
                 sb.AppendLine("            // 표시 시 로직");
                 sb.AppendLine("        }");
@@ -1032,7 +1134,7 @@ namespace UIModule.Editor
                 sb.AppendLine("            }");
                 sb.AppendLine("        }");
             }
-            else
+            else if (uiType == CreateUIType.Popup)
             {
                 sb.AppendLine("        protected override void OnPopupInitialize()");
                 sb.AppendLine("        {");
@@ -1094,11 +1196,109 @@ namespace UIModule.Editor
                 sb.AppendLine("            Close();");
                 sb.AppendLine("        }");
             }
+            else if (uiType == CreateUIType.Background)
+            {
+                AppendSingleLayerTemplate(sb, "Background");
+            }
+            else if (uiType == CreateUIType.Overlay)
+            {
+                AppendSingleLayerTemplate(sb, "Overlay");
+            }
+            else if (uiType == CreateUIType.System)
+            {
+                AppendSingleLayerTemplate(sb, "System");
+            }
             
             sb.AppendLine("    }");
             sb.AppendLine("}");
             
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// UI 타입에 맞는 Base 클래스 이름 반환
+        /// </summary>
+        private string GetBaseTypeName(CreateUIType uiType)
+        {
+            switch (uiType)
+            {
+                case CreateUIType.Background:
+                    return "BaseBackground";
+                case CreateUIType.Popup:
+                    return "BasePopup";
+                case CreateUIType.Overlay:
+                    return "BaseOverlay";
+                case CreateUIType.System:
+                    return "BaseSystem";
+                case CreateUIType.Screen:
+                default:
+                    return "BaseScreen";
+            }
+        }
+
+        /// <summary>
+        /// Background/Overlay/System 공용 템플릿 추가
+        /// </summary>
+        private void AppendSingleLayerTemplate(StringBuilder sb, string layerName)
+        {
+            sb.AppendLine($"        protected override void On{layerName}Initialize()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 버튼 클릭 이벤트 등록");
+            sb.AppendLine("            if (_buttonConfirm != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                _buttonConfirm.OnClick += OnButtonConfirmClicked;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            ");
+            sb.AppendLine("            if (_buttonClose != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                _buttonClose.OnClick += OnButtonCloseClicked;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            // 초기화 로직");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine($"        protected override void On{layerName}Show()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 표시 시 로직");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine($"        protected override void On{layerName}Hide()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 숨김 시 로직");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine($"        protected override void On{layerName}Destroy()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 버튼 클릭 이벤트 해제");
+            sb.AppendLine("            if (_buttonConfirm != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                _buttonConfirm.OnClick -= OnButtonConfirmClicked;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            ");
+            sb.AppendLine("            if (_buttonClose != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                _buttonClose.OnClick -= OnButtonCloseClicked;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            // 제거 시 로직");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// 확인 버튼 클릭 처리");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        private void OnButtonConfirmClicked()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 확인 버튼 로직");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        /// <summary>");
+            sb.AppendLine("        /// 닫기 버튼 클릭 처리");
+            sb.AppendLine("        /// </summary>");
+            sb.AppendLine("        private void OnButtonCloseClicked()");
+            sb.AppendLine("        {");
+            sb.AppendLine("            // 닫기 버튼 로직");
+            sb.AppendLine("            Hide();");
+            sb.AppendLine("        }");
         }
         
         
@@ -1119,11 +1319,12 @@ namespace UIModule.Editor
             // RectTransform 설정
             RectTransform rectTransform = prefabGO.AddComponent<RectTransform>();
             rectTransform.localScale = Vector3.one;
+            bool isScreen = _createUIType == CreateUIType.Screen;
+            bool isPopup = _createUIType == CreateUIType.Popup;
             
-            // Screen은 Stretch, Popup은 MiddleCenter로 설정
-            if (_isCreatingScreen)
+            // Screen/Background/Overlay/System은 Stretch, Popup은 MiddleCenter
+            if (!isPopup)
             {
-                // Screen: 전체 화면으로 설정
                 rectTransform.anchorMin = Vector2.zero;
                 rectTransform.anchorMax = Vector2.one;
                 rectTransform.sizeDelta = Vector2.zero;
@@ -1131,10 +1332,9 @@ namespace UIModule.Editor
             }
             else
             {
-                // Popup: MiddleCenter로 설정
                 rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
                 rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
+                rectTransform.sizeDelta = new Vector2(400, 300);
                 rectTransform.anchoredPosition = Vector2.zero;
             }
             
@@ -1144,7 +1344,7 @@ namespace UIModule.Editor
             RectTransform bgRect = bgGO.AddComponent<RectTransform>();
             UnityEngine.UI.Image bgImage = bgGO.AddComponent<UnityEngine.UI.Image>();
             
-            if (_isCreatingScreen)
+            if (isScreen)
             {
                 // Screen: 전체 화면, 어두운 그레이
                 bgImage.color = new Color(0.3f, 0.3f, 0.3f, 1f);
@@ -1172,7 +1372,7 @@ namespace UIModule.Editor
             // 버튼 위치 설정 (Screen은 하단 중앙, Popup은 하단)
             Vector2 confirmButtonPos, secondButtonPos;
             string secondButtonName;
-            if (_isCreatingScreen)
+            if (isScreen)
             {
                 // Screen: 하단 중앙에 배치, 뒤로가기 버튼
                 confirmButtonPos = new Vector2(-70, -400);
@@ -1191,7 +1391,7 @@ namespace UIModule.Editor
             GameObject confirmButtonGO = CreateButton("ButtonConfirm", "Confirm", prefabGO.transform, confirmButtonPos);
             
             // 두 번째 버튼 생성 (오른쪽)
-            string secondButtonTextEnglish = _isCreatingScreen ? "Back" : "Close";
+            string secondButtonTextEnglish = isScreen ? "Back" : "Close";
             GameObject secondButtonGO = CreateButton(secondButtonName, secondButtonTextEnglish, prefabGO.transform, secondButtonPos);
             
             // 프리팹으로 저장
@@ -1220,8 +1420,8 @@ namespace UIModule.Editor
                     }
                     
                     // 두 번째 버튼 참조 연결 (Screen: _buttonBack, Popup: _buttonClose)
-                    string secondButtonPropertyName = _isCreatingScreen ? "_buttonBack" : "_buttonClose";
-                    string secondButtonObjectName = _isCreatingScreen ? "ButtonBack" : "ButtonClose";
+                    string secondButtonPropertyName = isScreen ? "_buttonBack" : "_buttonClose";
+                    string secondButtonObjectName = isScreen ? "ButtonBack" : "ButtonClose";
                     SerializedProperty secondButtonProp = serializedObject.FindProperty(secondButtonPropertyName);
                     if (secondButtonProp != null)
                     {
@@ -1241,7 +1441,7 @@ namespace UIModule.Editor
             DestroyImmediate(prefabGO);
             
             // Popup 옵션 값 설정
-            if (!_isCreatingScreen && prefab != null)
+            if (isPopup && prefab != null)
             {
                 BasePopup popupComponent = prefab.GetComponent<BasePopup>();
                 if (popupComponent != null)

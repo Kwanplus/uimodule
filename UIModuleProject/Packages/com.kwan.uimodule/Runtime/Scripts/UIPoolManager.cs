@@ -149,37 +149,7 @@ namespace UIModule
                     
                     // RectTransform 설정 (Screen은 Stretch, Popup은 MiddleCenter)
                     RectTransform rectTransform = instance.GetComponent<RectTransform>();
-                    if (rectTransform != null)
-                    {
-                        if (targetLayer == UILayer.Screen)
-                        {
-                            // Screen: 전체 화면으로 설정
-                            rectTransform.anchorMin = Vector2.zero;
-                            rectTransform.anchorMax = Vector2.one;
-                            rectTransform.sizeDelta = Vector2.zero;
-                            rectTransform.anchoredPosition = Vector2.zero;
-                        }
-                        else if (targetLayer == UILayer.Popup)
-                        {
-                            // Popup: MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
-                            if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-                            {
-                                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                                if (rectTransform.sizeDelta == Vector2.zero)
-                                {
-                                    rectTransform.sizeDelta = new Vector2(400, 300); // 기본 크기
-                                }
-                                rectTransform.anchoredPosition = Vector2.zero;
-                            }
-                        }
-                        
-                        // Scale 확인 및 수정
-                        if (rectTransform.localScale == Vector3.zero)
-                        {
-                            rectTransform.localScale = Vector3.one;
-                        }
-                    }
+                    ApplyRectTransformByLayer(rectTransform, targetLayer);
                 }
                 else
                 {
@@ -188,6 +158,44 @@ namespace UIModule
             }
             
             return instance;
+        }
+
+        /// <summary>
+        /// 레이어별 RectTransform 규칙 적용
+        /// </summary>
+        private void ApplyRectTransformByLayer(RectTransform rectTransform, UILayer targetLayer)
+        {
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (targetLayer == UILayer.Screen || targetLayer == UILayer.Background || targetLayer == UILayer.Overlay || targetLayer == UILayer.System)
+            {
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.sizeDelta = Vector2.zero;
+                rectTransform.anchoredPosition = Vector2.zero;
+            }
+            else if (targetLayer == UILayer.Popup)
+            {
+                if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
+                {
+                    rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                    rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                    if (rectTransform.sizeDelta == Vector2.zero)
+                    {
+                        rectTransform.sizeDelta = new Vector2(400, 300);
+                    }
+
+                    rectTransform.anchoredPosition = Vector2.zero;
+                }
+            }
+
+            if (rectTransform.localScale == Vector3.zero)
+            {
+                rectTransform.localScale = Vector3.one;
+            }
         }
         
         /// <summary>
