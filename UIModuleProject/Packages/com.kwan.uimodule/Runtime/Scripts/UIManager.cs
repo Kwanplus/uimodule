@@ -743,20 +743,8 @@ namespace UIModule
                 rectTransform.anchorMax = Vector2.one;
                 rectTransform.sizeDelta = Vector2.zero;
                 rectTransform.anchoredPosition = Vector2.zero;
-                return;
             }
-
-            if (targetLayer == UILayer.Popup && rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-            {
-                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                if (rectTransform.sizeDelta == Vector2.zero)
-                {
-                    rectTransform.sizeDelta = new Vector2(400, 300);
-                }
-
-                rectTransform.anchoredPosition = Vector2.zero;
-            }
+            // Popup은 프리팹의 Anchor/Size/Position을 그대로 유지 (Stretch/Center 등 의도 존중)
         }
         
         /// <summary>

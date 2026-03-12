@@ -49,18 +49,8 @@ namespace UIModule
                     RectTransform rectTransform = GetComponent<RectTransform>();
                     if (rectTransform != null)
                     {
-                        // MiddleCenter로 설정 (프리팹에 설정이 없을 경우에만)
-                        if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-                        {
-                            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                            if (rectTransform.sizeDelta == Vector2.zero)
-                            {
-                                rectTransform.sizeDelta = new Vector2(400, 300);
-                            }
-                            rectTransform.anchoredPosition = Vector2.zero;
-                        }
-                        
+                        // Popup은 프리팹의 Anchor/Size/Position을 그대로 유지 (Stretch/Center 등 의도 존중)
+                        // Scale 0은 Unity 프리팹 버그 가능성이 있어 복구
                         if (rectTransform.localScale == Vector3.zero)
                         {
                             rectTransform.localScale = Vector3.one;

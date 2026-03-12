@@ -147,7 +147,7 @@ namespace UIModule
                         instance.transform.SetParent(layerCanvas.transform, false);
                     }
                     
-                    // RectTransform 설정 (Screen은 Stretch, Popup은 MiddleCenter)
+                    // RectTransform 설정 (Screen/Background/Overlay/System은 Stretch, Popup은 프리팹 값 유지)
                     RectTransform rectTransform = instance.GetComponent<RectTransform>();
                     ApplyRectTransformByLayer(rectTransform, targetLayer);
                 }
@@ -177,20 +177,7 @@ namespace UIModule
                 rectTransform.sizeDelta = Vector2.zero;
                 rectTransform.anchoredPosition = Vector2.zero;
             }
-            else if (targetLayer == UILayer.Popup)
-            {
-                if (rectTransform.anchorMin == Vector2.zero && rectTransform.anchorMax == Vector2.one)
-                {
-                    rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-                    rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-                    if (rectTransform.sizeDelta == Vector2.zero)
-                    {
-                        rectTransform.sizeDelta = new Vector2(400, 300);
-                    }
-
-                    rectTransform.anchoredPosition = Vector2.zero;
-                }
-            }
+            // Popup은 프리팹의 Anchor/Size/Position을 그대로 유지 (Stretch/Center 등 의도 존중)
 
             if (rectTransform.localScale == Vector3.zero)
             {
