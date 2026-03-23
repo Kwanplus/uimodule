@@ -60,6 +60,8 @@ namespace UIModule
         [SerializeField] private Vector2 _referenceResolution = new Vector2(1920, 1080);
         [SerializeField] [Range(0f, 1f)] private float _matchWidthOrHeight = 0.5f;
         [SerializeField] private CanvasScaler.ScreenMatchMode _screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        // 동적 생성 레이어 Canvas의 CanvasScaler.Reference Pixels Per Unit (스프라이트/UI 단위 환산)
+        [SerializeField] private float _referencePixelsPerUnit = 100f;
         
         // 레이어별 Sorting Order 설정
         private const int BASE_SORTING_ORDER = 100;
@@ -169,6 +171,7 @@ namespace UIModule
             scaler.referenceResolution = _referenceResolution;
             scaler.matchWidthOrHeight = _matchWidthOrHeight;
             scaler.screenMatchMode = _screenMatchMode;
+            scaler.referencePixelsPerUnit = _referencePixelsPerUnit;
             
             canvasGO.AddComponent<GraphicRaycaster>();
             
