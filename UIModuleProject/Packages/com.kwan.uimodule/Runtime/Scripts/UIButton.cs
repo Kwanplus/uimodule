@@ -11,6 +11,8 @@ namespace UIModule
     [RequireComponent(typeof(Button))]
     public class UIButton : MonoBehaviour
     {
+        public static event Action OnAnyClicked;
+
         [Header("버튼 설정")]
         [SerializeField] private Button _button;
         
@@ -53,6 +55,7 @@ namespace UIModule
         /// </summary>
         private void HandleButtonClick()
         {
+            OnAnyClicked?.Invoke();
             OnClick?.Invoke();
         }
         
