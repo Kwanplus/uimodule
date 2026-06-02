@@ -8,6 +8,9 @@ namespace UIModule
     /// </summary>
     public abstract class BaseScreen : BaseUI
     {
+        /// <summary>OnScreenBegin 완료 직후 발행. 인자는 begin이 끝난 화면 인스턴스.</summary>
+        public static event System.Action<BaseScreen> ScreenBegan;
+
         protected virtual void Awake()
         {
             layer = UILayer.Screen;
@@ -53,6 +56,9 @@ namespace UIModule
         public void NotifyScreenBegin()
         {
             OnScreenBegin();
+
+            // OnScreenBegin에서 생성된 동적 행이 서브트리에 존재하는 시점에 발행되도록 직후 통지
+            ScreenBegan?.Invoke(this);
         }
         
         protected override void OnHide()
