@@ -7,6 +7,9 @@ namespace UIModule
     /// </summary>
     public abstract class BaseUI : MonoBehaviour
     {
+        /// <summary>UI가 표시(활성화) 완료된 직후 발행. 인자는 표시된 UI 인스턴스.</summary>
+        public static event System.Action<BaseUI> Presented;
+
         [Header("UI 기본 설정")]
         [SerializeField] protected UILayer layer;
         
@@ -53,6 +56,9 @@ namespace UIModule
             OnShow();
             gameObject.SetActive(true);
             IsActive = true;
+
+            // OnShow에서 생성된 하위 요소까지 서브트리에 존재하는 시점에 발행되도록 Show() 말미에서 통지
+            Presented?.Invoke(this);
         }
         
         /// <summary>
