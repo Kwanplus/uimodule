@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -85,6 +86,67 @@ namespace UIModule.Editor.Tests
                 var issues = UIGamepadValidator.ValidateGameObject(root);
 
                 Assert.That(ContainsMessage(issues, "Navigation Group에 유효한 Selectable"), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// 명시 Navigation Group 배열 밖의 하위 Selectable은 Navigation.None 경고 대상인지 검증한다.
+        /// </summary>
+        [Test]
+        public void ValidateGameObject_ReportsNavigationNoneOutsideExplicitGroupList()
+        {
+            GameObject root = new GameObject("ValidationRoot", typeof(RectTransform), typeof(TestValidationUI), typeof(UILinearNavigation));
+            try
+            {
+                Button managedButton = CreateButton("Managed", root.transform);
+                Button unmanagedButton = CreateButton("Unmanaged", root.transform);
+                Navigation navigation = unmanagedButton.navigation;
+                navigation.mode = Navigation.Mode.None;
+                unmanagedButton.navigation = navigation;
+
+                SerializedObject serializedGroup = new SerializedObject(root.GetComponent<UILinearNavigation>());
+                SerializedProperty selectables = serializedGroup.FindProperty("_selectables");
+                selectables.arraySize = 1;
+                selectables.GetArrayElementAtIndex(0).objectReferenceValue = managedButton;
+                serializedGroup.ApplyModifiedPropertiesWithoutUndo();
+
+                var issues = UIGamepadValidator.ValidateGameObject(root);
+
+                Assert.That(ContainsMessage(issues, "Navigation이 None"), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// 명시 Navigation Group 배열 안의 Selectable은 Navigation.None 경고에서 제외되는지 검증한다.
+        /// </summary>
+        [Test]
+        public void ValidateGameObject_SkipsNavigationNoneForExplicitGroupMember()
+        {
+            GameObject root = new GameObject("ValidationRoot", typeof(RectTransform), typeof(TestValidationUI), typeof(UILinearNavigation));
+            try
+            {
+                Button managedButton = CreateButton("Managed", root.transform);
+                Navigation navigation = managedButton.navigation;
+                navigation.mode = Navigation.Mode.None;
+                managedButton.navigation = navigation;
+
+                SerializedObject serializedGroup = new SerializedObject(root.GetComponent<UILinearNavigation>());
+                SerializedProperty selectables = serializedGroup.FindProperty("_selectables");
+                selectables.arraySize = 1;
+                selectables.GetArrayElementAtIndex(0).objectReferenceValue = managedButton;
+                serializedGroup.ApplyModifiedPropertiesWithoutUndo();
+
+                var issues = UIGamepadValidator.ValidateGameObject(root);
+
+                Assert.That(ContainsMessage(issues, "Navigation이 None"), Is.False);
             }
             finally
             {

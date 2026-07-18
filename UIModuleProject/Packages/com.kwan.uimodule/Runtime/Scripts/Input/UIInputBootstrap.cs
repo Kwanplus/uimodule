@@ -14,6 +14,20 @@ namespace UIModule
     {
         private static readonly HashSet<string> ReportedDiagnostics = new HashSet<string>();
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetDiagnostics()
+        {
+            ReportedDiagnostics.Clear();
+        }
+
+        /// <summary>
+        /// 테스트 격리를 위해 기록된 진단 키를 초기화한다.
+        /// </summary>
+        internal static void ResetDiagnosticsForTests()
+        {
+            ReportedDiagnostics.Clear();
+        }
+
         /// <summary>
         /// UI 입력에 사용할 EventSystem을 준비한다.
         /// </summary>
@@ -22,7 +36,17 @@ namespace UIModule
         /// <returns>준비된 EventSystem 또는 null이다.</returns>
         internal static EventSystem Ensure(Transform owner, UIInputConfiguration configuration)
         {
-            EventSystem eventSystem = Object.FindFirstObjectByType<EventSystem>();
+            EventSystem[] eventSystems = Object.FindObjectsByType<EventSystem>(
+                FindObjectsInactive.Exclude,
+                FindObjectsSortMode.None);
+            if (eventSystems.Length > 1)
+            {
+                ReportOnce(
+                    "MultipleEventSystems",
+                    "[UIModule] 활성 EventSystem이 여러 개입니다. UI 입력을 처리할 EventSystem을 하나만 유지하세요.");
+            }
+
+            EventSystem eventSystem = eventSystems.Length > 0 ? eventSystems[0] : null;
             if (eventSystem != null)
             {
                 ValidateExistingEventSystem(eventSystem);

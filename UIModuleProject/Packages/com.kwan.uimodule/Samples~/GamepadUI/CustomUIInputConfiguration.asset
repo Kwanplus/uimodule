@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe2c50d856acb374b890968748af5057, type: 3}
+  m_Name: CustomUIInputConfiguration
+  m_EditorClassIdentifier: UIModule.Runtime::UIModule.UIInputConfiguration
+  _navigate:
+    m_Asset: {fileID: 11400000, guid: 15b7d6ec2c4b47a5a95c5f6e7b6a8d32, type: 2}
+    m_ActionId: c3ccf824-cb5b-41aa-9977-fd5a9377b799
+  _submit:
+    m_Asset: {fileID: 11400000, guid: 15b7d6ec2c4b47a5a95c5f6e7b6a8d32, type: 2}
+    m_ActionId: 9179bea0-a61b-4fbb-b391-08e985eaf5fa
+  _cancel:
+    m_Asset: {fileID: 11400000, guid: 15b7d6ec2c4b47a5a95c5f6e7b6a8d32, type: 2}
+    m_ActionId: ca0f3cb3-241b-43d0-a2ae-7fb4b29d10a0
+  _point: {fileID: 0}
+  _click: {fileID: 0}
+  _rightClick: {fileID: 0}
+  _middleClick: {fileID: 0}
+  _scrollWheel: {fileID: 0}
+  _trackedDevicePosition: {fileID: 0}
+  _trackedDeviceOrientation: {fileID: 0}

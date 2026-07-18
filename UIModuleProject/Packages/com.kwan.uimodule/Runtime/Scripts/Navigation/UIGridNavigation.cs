@@ -15,6 +15,16 @@ namespace UIModule
         [SerializeField] private bool _wrapVertical;
 
         /// <summary>
+        /// 런타임 생성 Grid Navigation의 열 수와 순환 여부를 설정한다.
+        /// </summary>
+        public void Configure(int columnCount, bool wrapHorizontal = false, bool wrapVertical = false)
+        {
+            _columnCount = Mathf.Max(1, columnCount);
+            _wrapHorizontal = wrapHorizontal;
+            _wrapVertical = wrapVertical;
+        }
+
+        /// <summary>
         /// 대상 목록에 격자 Navigation을 설정한다.
         /// </summary>
         protected override void BuildNavigation(IReadOnlyList<Selectable> selectables)

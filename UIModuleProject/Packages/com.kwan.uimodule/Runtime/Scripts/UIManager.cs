@@ -487,24 +487,11 @@ namespace UIModule
         }
         
         /// <summary>
-        /// 가장 위의 Popup 닫기 (Back 키 처리)
+        /// 현재 최상위 UI의 Cancel 정책을 적용한다.
         /// </summary>
         public void CloseTopPopup()
         {
-            if (_lastCancelFrame == Time.frameCount)
-            {
-                return;
-            }
-
-            if (_popupStack.Count > 0)
-            {
-                BasePopup topPopup = _popupStack.Peek();
-                if (topPopup != null)
-                {
-                    _lastCancelFrame = Time.frameCount;
-                    topPopup.OnBackKeyPressed();
-                }
-            }
+            TryRouteCancel();
         }
         
         /// <summary>
@@ -1073,7 +1060,11 @@ namespace UIModule
             while (_popupStack.Count > 0
                 && (_popupStack.Peek() == null || !_popupStack.Peek().IsActive))
             {
-                _popupStack.Pop();
+                BasePopup stalePopup = _popupStack.Pop();
+                if (stalePopup != null)
+                {
+                    _focusController?.Forget(stalePopup);
+                }
             }
 
             if (_popupStack.Count > 0)

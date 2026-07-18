@@ -160,6 +160,26 @@ namespace UIModule.Tests
 
             Assert.That(overlay.PrimaryButton.interactable, Is.True);
         }
+
+        /// <summary>
+        /// 런타임 생성 Scope도 Custom Cancel listener를 안전하게 등록하고 호출하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RuntimeFocusScope_CustomCancelListener_IsInvoked()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            int invokeCount = 0;
+            UIFocusScope scope = screen.gameObject.AddComponent<UIFocusScope>();
+            scope.Configure(screen.PrimaryButton, UICancelBehavior.Custom);
+            scope.AddCancelListener(() => invokeCount++);
+
+            Assert.That(manager.TryRouteCancel(), Is.True);
+            Assert.That(invokeCount, Is.EqualTo(1));
+        }
     }
 
     /// <summary>

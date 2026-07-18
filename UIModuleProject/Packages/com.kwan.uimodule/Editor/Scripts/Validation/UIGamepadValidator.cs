@@ -266,6 +266,20 @@ namespace UIModule.Editor
         {
             foreach (UINavigationGroup group in uiRoot.GetComponentsInChildren<UINavigationGroup>(true))
             {
+                SerializedProperty selectablesProperty = new SerializedObject(group).FindProperty("_selectables");
+                if (selectablesProperty != null && selectablesProperty.arraySize > 0)
+                {
+                    for (int index = 0; index < selectablesProperty.arraySize; index++)
+                    {
+                        if (selectablesProperty.GetArrayElementAtIndex(index).objectReferenceValue == selectable)
+                        {
+                            return true;
+                        }
+                    }
+
+                    continue;
+                }
+
                 if (selectable.transform.IsChildOf(group.transform))
                 {
                     return true;

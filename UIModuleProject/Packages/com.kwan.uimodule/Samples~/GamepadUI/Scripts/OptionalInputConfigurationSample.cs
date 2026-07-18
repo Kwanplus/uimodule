@@ -1,5 +1,6 @@
 using UIModule;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace UIModule.GamepadSample
 {
@@ -29,7 +30,51 @@ namespace UIModule.GamepadSample
             manager.SetInputConfiguration(_inputConfiguration);
             managerObject.SetActive(true);
             manager.SetPoolingEnabled(false);
-            manager.ShowScreen<GamepadUISampleScreen>();
+            manager.ShowScreen<CustomInputSampleScreen>();
+        }
+    }
+
+    /// <summary>
+    /// 비표준 Action과 runtime Custom Cancel을 함께 확인하는 동적 Grid 샘플이다.
+    /// </summary>
+    public sealed class CustomInputSampleScreen : BaseScreen
+    {
+        protected override void OnScreenInitialize()
+        {
+            Button firstButton = null;
+            for (int index = 0; index < 9; index++)
+            {
+                GameObject buttonObject = new GameObject($"Grid Button {index + 1}", typeof(RectTransform), typeof(Image), typeof(Button));
+                buttonObject.transform.SetParent(transform, false);
+                RectTransform rectTransform = buttonObject.GetComponent<RectTransform>();
+                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                rectTransform.sizeDelta = new Vector2(150f, 52f);
+                rectTransform.anchoredPosition = new Vector2((index % 3 - 1) * 170f, (1 - index / 3) * 70f);
+                buttonObject.GetComponent<Image>().color = new Color(0.25f, 0.55f, 0.35f, 1f);
+                firstButton ??= buttonObject.GetComponent<Button>();
+            }
+
+            UIGridNavigation navigation = gameObject.AddComponent<UIGridNavigation>();
+            navigation.Configure(3);
+            navigation.RebuildNavigation();
+
+            UIFocusScope scope = gameObject.AddComponent<UIFocusScope>();
+            scope.Configure(firstButton, UICancelBehavior.Custom);
+            // 이 Scene은 Custom Cancel이 Action 설정과 독립적으로 UI에서만 처리됨을 보여준다.
+            scope.AddCancelListener(() => Debug.Log("[Gamepad UI Sample] Custom Cancel invoked."));
+        }
+
+        protected override void OnScreenBegin()
+        {
+        }
+
+        protected override void OnScreenHide()
+        {
+        }
+
+        protected override void OnScreenDestroy()
+        {
         }
     }
 }

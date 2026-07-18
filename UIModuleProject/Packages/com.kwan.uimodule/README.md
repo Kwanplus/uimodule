@@ -26,7 +26,7 @@ UIManager.Instance.ShowPopup<SettingsPopup>();
 - 동적 Screen: `OnScreenBegin()` 이후 다음 프레임 말미에 포커스를 적용합니다.
 - Cancel: 선택 항목이 없으면 최상위 활성 UI로 한 번 라우팅됩니다. Popup은 기존 `OnBackKeyPressed()`, Screen은 `BackScreen()`을 기본 동작으로 사용합니다.
 - Default Cancel은 Popup과 Screen에서만 제공합니다. Background/Overlay/System은 `UIFocusScope`의 Ignore/Custom 정책 또는 선택된 `ICancelHandler`로 명시 처리하세요.
-- 복합 UI는 `UIFocusScope`의 Default/Ignore/Custom Cancel 정책과 `UILinearNavigation`, `UIGridNavigation`, `UISpatialNavigation`, `UIEnsureVisibleInScrollRect`를 선택적으로 사용합니다.
+- 복합 UI는 `UIFocusScope`의 Default/Ignore/Custom Cancel 정책과 `UILinearNavigation`, `UIGridNavigation`, `UISpatialNavigation`, `UIEnsureVisibleInScrollRect`를 선택적으로 사용합니다. 런타임 Custom Cancel은 `AddCancelListener()`로 등록할 수 있습니다.
 
 ## 게임플레이 입력 경계
 
@@ -52,5 +52,5 @@ uiManager.InputDeviceChanged += state =>
 
 ## 검증과 샘플
 
-- `Tools > UIModule > Validate Gamepad UI`에서 Default Selection, Navigation.None, Explicit 링크, Navigation Group(Grid/Spatial 포함), ScrollRect 구성을 검사합니다. Scope가 없는 단순 UI는 정상 구성입니다.
-- Package Manager에서 **Gamepad UI** Sample을 import한 뒤 빈 Scene에 `GamepadUISampleBootstrap`을 추가하면 Button/Slider와 중첩 Popup 무설정 흐름을 확인할 수 있습니다. 외부 Popup 인스턴스는 `UIManager.ShowPopup(popup)`으로 등록하세요. 직접 `Show()`는 호환을 위해 자동 등록되지만 1회 경고를 냅니다.
+- `Tools > UIModule > Validate Gamepad UI`에서 Default Selection, Navigation.None, Explicit 링크, Navigation Group(Grid/Spatial 포함), ScrollRect 구성을 검사합니다. Navigation Group은 배열이 비어 있으면 하위 Selectable 전체를, 배열이 있으면 그 배열의 항목만 관리 대상으로 판단합니다.
+- Package Manager에서 **Gamepad UI** Sample을 import한 뒤 `Scenes/GamepadUIZeroConfig.unity` 또는 `Scenes/GamepadUICustomInput.unity`를 열어 무설정과 비표준 Action 연결 흐름을 확인할 수 있습니다. 외부 Popup 인스턴스는 `UIManager.ShowPopup(popup)`으로 등록하세요. 직접 `Show()`는 호환을 위해 자동 등록되지만 1회 경고를 냅니다.

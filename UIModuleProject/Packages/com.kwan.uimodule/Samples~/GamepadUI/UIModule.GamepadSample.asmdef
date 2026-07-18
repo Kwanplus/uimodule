@@ -1,0 +1,18 @@
+{
+    "name": "UIModule.GamepadSample",
+    "rootNamespace": "UIModule.GamepadSample",
+    "references": [
+        "UIModule.Runtime",
+        "Unity.InputSystem",
+        "Unity.ugui"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -13,7 +13,7 @@ namespace UIModule
         [SerializeField] private UICancelBehavior _cancelBehavior = UICancelBehavior.Default;
         [SerializeField] private bool _keepSelectionOnPointerInput = true;
         [SerializeField] private bool _blocksLowerScopes = true;
-        [SerializeField] private UnityEvent _onCancel;
+        [SerializeField] private UnityEvent _onCancel = new UnityEvent();
 
         /// <summary>이 범위의 최초 선택 대상을 반환한다.</summary>
         public Selectable DefaultSelection => _defaultSelection;
@@ -40,6 +40,7 @@ namespace UIModule
             _cancelBehavior = cancelBehavior;
             _keepSelectionOnPointerInput = keepSelectionOnPointerInput;
             _blocksLowerScopes = blocksLowerScopes;
+            EnsureCancelEvent();
         }
 
         /// <summary>
@@ -47,6 +48,12 @@ namespace UIModule
         /// </summary>
         public void AddCancelListener(UnityAction listener)
         {
+            if (listener == null)
+            {
+                return;
+            }
+
+            EnsureCancelEvent();
             _onCancel.AddListener(listener);
         }
 
@@ -55,7 +62,19 @@ namespace UIModule
         /// </summary>
         public void InvokeCustomCancel()
         {
-            _onCancel?.Invoke();
+            EnsureCancelEvent();
+            _onCancel.Invoke();
+        }
+
+        /// <summary>
+        /// 런타임으로 추가된 Scope도 Custom Cancel 이벤트를 안전하게 보유하도록 보장한다.
+        /// </summary>
+        private void EnsureCancelEvent()
+        {
+            if (_onCancel == null)
+            {
+                _onCancel = new UnityEvent();
+            }
         }
     }
 
