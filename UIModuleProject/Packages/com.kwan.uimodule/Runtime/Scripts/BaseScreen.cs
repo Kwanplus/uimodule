@@ -11,6 +11,9 @@ namespace UIModule
         /// <summary>OnScreenBegin 완료 직후 발행. 인자는 begin이 끝난 화면 인스턴스.</summary>
         public static event System.Action<BaseScreen> ScreenBegan;
 
+        /// <summary>스택 복귀로 Screen이 다시 표시된 직후 발행. 인자는 재개된 화면 인스턴스.</summary>
+        public static event System.Action<BaseScreen> ScreenResumed;
+
         protected virtual void Awake()
         {
             layer = UILayer.Screen;
@@ -60,6 +63,16 @@ namespace UIModule
             // OnScreenBegin에서 생성된 동적 행이 서브트리에 존재하는 시점에 발행되도록 직후 통지
             ScreenBegan?.Invoke(this);
         }
+
+        /// <summary>
+        /// Screen 스택 복귀 후 호출한다.
+        /// 동적 콘텐츠를 중복 생성하지 않도록 OnScreenBegin과 분리한다.
+        /// </summary>
+        public void NotifyScreenResumed()
+        {
+            OnScreenResumed();
+            ScreenResumed?.Invoke(this);
+        }
         
         protected override void OnHide()
         {
@@ -87,6 +100,12 @@ namespace UIModule
         /// 이 시점에서 팝업을 띄워도 안전합니다.
         /// </summary>
         protected abstract void OnScreenBegin();
+        /// <summary>
+        /// Screen 스택 복귀 후 호출한다.
+        /// </summary>
+        protected virtual void OnScreenResumed()
+        {
+        }
         protected abstract void OnScreenHide();
         protected abstract void OnScreenDestroy();
     }

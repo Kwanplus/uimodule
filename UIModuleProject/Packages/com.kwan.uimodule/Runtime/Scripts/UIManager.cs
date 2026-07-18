@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
+
+using UnityEngine.InputSystem.UI;
 
 namespace UIModule
 {
@@ -53,6 +56,10 @@ namespace UIModule
         // Pooling 사용 여부
         [Header("Pooling 설정")]
         [SerializeField] private bool _usePooling = true;
+
+        [Header("Gamepad UI Input")]
+        [Tooltip("비표준 UI Input Action을 사용하는 프로젝트에서만 지정합니다.")]
+        [SerializeField] private UIInputConfiguration _inputConfiguration;
         
         // Canvas Scaler 설정
         [Header("Canvas Scaler 설정")]
@@ -65,6 +72,31 @@ namespace UIModule
         
         // 레이어별 Sorting Order 설정
         private const int BASE_SORTING_ORDER = 100;
+
+        private EventSystem _eventSystem;
+        private UIFocusController _focusController;
+        private UIInputCaptureState _inputCaptureState;
+        private int _lastCancelFrame = -1;
+
+        /// <summary>
+        /// UI 입력에 사용 중인 EventSystem을 반환한다.
+        /// </summary>
+        public EventSystem EventSystem => _eventSystem;
+
+        /// <summary>
+        /// 현재 UI 입력 점유 상태를 반환한다.
+        /// </summary>
+        public UIInputCaptureState InputCaptureState => _inputCaptureState;
+
+        /// <summary>
+        /// UI가 게임플레이 입력을 점유하고 있는지 반환한다.
+        /// </summary>
+        public bool IsInputCaptured => _inputCaptureState.IsCaptured;
+
+        /// <summary>
+        /// UI 입력 점유 상태가 바뀔 때 발행한다.
+        /// </summary>
+        public event System.Action<UIInputCaptureState> InputCaptureChanged;
         
         private void Awake()
         {
@@ -73,11 +105,44 @@ namespace UIModule
                 _instance = this;
                 DontDestroyOnLoad(gameObject);
                 InitializeLayers();
+                _focusController = new UIFocusController(this);
+                BaseUI.Presented += HandleUiPresented;
+                BaseUI.Hiding += HandleUiHiding;
+                BaseUI.Hidden += HandleUiHidden;
+                BaseScreen.ScreenBegan += HandleScreenBegan;
+                BaseScreen.ScreenResumed += HandleScreenResumed;
+                UpdateInputCaptureState();
             }
             else if (_instance != this)
             {
                 Destroy(gameObject);
             }
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance != this)
+            {
+                return;
+            }
+
+            BaseUI.Presented -= HandleUiPresented;
+            BaseUI.Hiding -= HandleUiHiding;
+            BaseUI.Hidden -= HandleUiHidden;
+            BaseScreen.ScreenBegan -= HandleScreenBegan;
+            BaseScreen.ScreenResumed -= HandleScreenResumed;
+            _instance = null;
+        }
+
+        private void Update()
+        {
+            HandleCancelInput();
+            HandleNavigationInput();
+        }
+
+        private void LateUpdate()
+        {
+            _focusController?.ApplyPointerSelectionPolicy();
         }
         
         /// <summary>
@@ -101,57 +166,7 @@ namespace UIModule
         /// </summary>
         private void CreateEventSystem()
         {
-            // 이미 EventSystem이 있으면 생성하지 않음
-            if (FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() != null)
-            {
-                return;
-            }
-            
-            GameObject eventSystemGO = new GameObject("EventSystem");
-            // UIManager의 자식으로 설정 (UIManager가 이미 DontDestroyOnLoad이므로 자식도 함께 유지됨)
-            eventSystemGO.transform.SetParent(transform);
-            
-            // EventSystem 컴포넌트 추가
-            eventSystemGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
-            
-            // Input System 패키지 사용 여부 확인
-            bool useInputSystem = IsInputSystemPackageEnabled();
-            
-            if (useInputSystem)
-            {
-                // 새로운 Input System 사용
-                #if ENABLE_INPUT_SYSTEM
-                var inputModule = eventSystemGO.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
-                // 기본 설정
-                inputModule.enabled = true;
-                #else
-                // Input System 패키지는 있지만 활성화되지 않은 경우
-                eventSystemGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-                #endif
-            }
-            else
-            {
-                // 구 Input System 사용
-                eventSystemGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-            }
-            
-            // UIManager가 이미 DontDestroyOnLoad이므로 자식인 EventSystem도 함께 유지됨
-            // 별도로 DontDestroyOnLoad를 호출할 필요 없음
-        }
-        
-        /// <summary>
-        /// Input System 패키지가 활성화되어 있는지 확인
-        /// </summary>
-        private bool IsInputSystemPackageEnabled()
-        {
-            #if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-            return true;
-            #elif ENABLE_INPUT_SYSTEM && ENABLE_LEGACY_INPUT_MANAGER
-            // 둘 다 활성화된 경우, Input System이 우선
-            return true;
-            #else
-            return false;
-            #endif
+            _eventSystem = UIInputBootstrap.Ensure(transform, _inputConfiguration);
         }
         
         /// <summary>
@@ -237,6 +252,7 @@ namespace UIModule
                 _screenStack.Push(newScreen);
                 newScreen.Show();
                 newScreen.NotifyScreenBegin();
+                UpdateInputCaptureState();
             }
             
             return newScreen;
@@ -306,14 +322,18 @@ namespace UIModule
                         {
                             _screenStack.Push(newScreen);
                             newScreen.Show();
+                            newScreen.NotifyScreenResumed();
                         }
                     }
                     else
                     {
                         previousScreen.Show();
+                        previousScreen.NotifyScreenResumed();
                     }
                 }
             }
+
+            UpdateInputCaptureState();
         }
         
         /// <summary>
@@ -329,6 +349,8 @@ namespace UIModule
                     currentScreen.Hide();
                 }
             }
+
+            UpdateInputCaptureState();
         }
         
         /// <summary>
@@ -366,6 +388,7 @@ namespace UIModule
             {
                 _popupStack.Push(newPopup);
                 newPopup.Show();
+                UpdateInputCaptureState();
             }
             return newPopup;
         }
@@ -402,7 +425,10 @@ namespace UIModule
             if (_popupStack.Count > 0)
             {
                 BasePopup topPopup = _popupStack.Peek();
-                topPopup.OnBackKeyPressed();
+                if (topPopup != null)
+                {
+                    topPopup.OnBackKeyPressed();
+                }
             }
         }
         
@@ -416,6 +442,8 @@ namespace UIModule
                 BasePopup popup = _popupStack.Pop();
                 popup.Hide();
             }
+
+            UpdateInputCaptureState();
         }
         
         /// <summary>
@@ -449,6 +477,8 @@ namespace UIModule
                 {
                     _popupStack.Push(tempStack.Pop());
                 }
+
+            UpdateInputCaptureState();
             }
         }
         
@@ -567,8 +597,12 @@ namespace UIModule
                 return existingUI;
             }
             
-            // 프리팹에서 인스턴스화
-            BaseUI prefabInstance = InstantiateFromPrefabByType(uiType, targetLayer);
+            // Pooling을 끈 경우 프리팹이 없는 타입은 런타임 UI 생성을 의도한 것으로 보고
+            // 불필요한 경고 없이 아래의 빈 UI 생성 경로로 진행한다.
+            string prefabPath = _prefabPathPrefix + uiType.Name;
+            BaseUI prefabInstance = Resources.Load<GameObject>(prefabPath) == null
+                ? null
+                : InstantiateFromPrefabByType(uiType, targetLayer);
             if (prefabInstance != null)
             {
                 _uiInstanceCache[uiType] = prefabInstance;
@@ -579,7 +613,7 @@ namespace UIModule
             Canvas canvas = GetLayerCanvas(targetLayer);
             if (canvas != null)
             {
-                GameObject uiGO = new GameObject(uiType.Name);
+                GameObject uiGO = new GameObject(uiType.Name, typeof(RectTransform));
                 uiGO.transform.SetParent(canvas.transform, false);
                 BaseUI newUI = uiGO.AddComponent(uiType) as BaseUI;
                 _uiInstanceCache[uiType] = newUI;
@@ -785,6 +819,24 @@ namespace UIModule
         {
             return _usePooling;
         }
+
+        /// <summary>
+        /// UI 풀링 사용 여부를 설정한다.
+        /// 샘플 또는 런타임 생성 UI를 사용할 때는 false로 설정할 수 있다.
+        /// </summary>
+        public void SetPoolingEnabled(bool usePooling)
+        {
+            if (_usePooling == usePooling)
+            {
+                return;
+            }
+
+            _usePooling = usePooling;
+            if (!usePooling && UIPoolManager.Instance != null)
+            {
+                UIPoolManager.Instance.ClearAllPools();
+            }
+        }
         
         /// <summary>
         /// 프리팹 경로 접두사 가져오기
@@ -815,6 +867,214 @@ namespace UIModule
             }
             
             _prefabPathPrefix = newPathPrefix;
+        }
+
+        /// <summary>
+        /// 현재 입력을 받아야 하는 최상위 UI를 반환한다.
+        /// </summary>
+        internal BaseUI GetTopInputUI()
+        {
+            BaseUI systemUi = GetActiveSingleLayerUI(UILayer.System);
+            if (systemUi != null)
+            {
+                return systemUi;
+            }
+
+            BaseUI overlayUi = GetActiveSingleLayerUI(UILayer.Overlay);
+            if (overlayUi != null)
+            {
+                return overlayUi;
+            }
+
+            if (_popupStack.Count > 0 && _popupStack.Peek() != null && _popupStack.Peek().IsActive)
+            {
+                return _popupStack.Peek();
+            }
+
+            BaseScreen screen = GetCurrentScreen();
+            if (screen != null && screen.IsActive)
+            {
+                return screen;
+            }
+
+            return GetActiveSingleLayerUI(UILayer.Background);
+        }
+
+        /// <summary>
+        /// 코드에서 Cancel을 한 번 라우팅한다.
+        /// </summary>
+        /// <returns>Cancel을 UI가 처리했으면 true다.</returns>
+        public bool TryRouteCancel()
+        {
+            BaseUI targetUi = GetTopInputUI();
+            if (targetUi == null)
+            {
+                return false;
+            }
+
+            UIFocusScope scope = targetUi.GetComponent<UIFocusScope>();
+            UICancelBehavior behavior = scope == null ? UICancelBehavior.Default : scope.CancelBehavior;
+            if (behavior == UICancelBehavior.Ignore)
+            {
+                return true;
+            }
+
+            if (behavior == UICancelBehavior.Custom)
+            {
+                scope.InvokeCustomCancel();
+                return true;
+            }
+
+            if (targetUi is BasePopup popup)
+            {
+                popup.OnBackKeyPressed();
+                return true;
+            }
+
+            if (targetUi is BaseScreen)
+            {
+                BackScreen();
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 활성 단일 레이어 UI를 반환한다.
+        /// </summary>
+        private BaseUI GetActiveSingleLayerUI(UILayer layer)
+        {
+            foreach (BaseUI ui in _singlePerTypeLayerCache.Values)
+            {
+                if (ui != null && ui.Layer == layer && ui.IsActive)
+                {
+                    return ui;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// UI 표시 이벤트를 포커스와 입력 점유 상태에 반영한다.
+        /// </summary>
+        private void HandleUiPresented(BaseUI ui)
+        {
+            _focusController?.HandleShown(ui);
+            UpdateInputCaptureState();
+        }
+
+        /// <summary>
+        /// UI 숨김 직전 stale selection을 제거한다.
+        /// </summary>
+        private void HandleUiHiding(BaseUI ui)
+        {
+            _focusController?.HandleHiding(ui);
+        }
+
+        /// <summary>
+        /// UI 숨김 뒤 포커스와 입력 점유 상태를 갱신한다.
+        /// </summary>
+        private void HandleUiHidden(BaseUI ui)
+        {
+            _focusController?.HandleHidden(ui);
+            UpdateInputCaptureState();
+        }
+
+        /// <summary>
+        /// 동적 Screen 콘텐츠 생성이 끝난 뒤 포커스를 적용한다.
+        /// </summary>
+        private void HandleScreenBegan(BaseScreen screen)
+        {
+            _focusController?.HandleScreenBegan(screen);
+        }
+
+        /// <summary>
+        /// Screen 스택 복귀 뒤 포커스를 복원한다.
+        /// </summary>
+        private void HandleScreenResumed(BaseScreen screen)
+        {
+            _focusController?.HandleScreenBegan(screen);
+        }
+
+        /// <summary>
+        /// Input System UI 모듈이 처리하지 못하는 Cancel만 최상위 UI로 전달한다.
+        /// </summary>
+        private void HandleCancelInput()
+        {
+            if (!(_eventSystem?.currentInputModule is InputSystemUIInputModule inputModule)
+                || inputModule.cancel?.action == null
+                || !inputModule.cancel.action.WasPerformedThisFrame()
+                || _lastCancelFrame == Time.frameCount)
+            {
+                return;
+            }
+
+            _lastCancelFrame = Time.frameCount;
+            GameObject selected = _eventSystem.currentSelectedGameObject;
+            if (selected != null && ExecuteEvents.CanHandleEvent<ICancelHandler>(selected))
+            {
+                return;
+            }
+
+            TryRouteCancel();
+        }
+
+        /// <summary>
+        /// Navigate 입력에서 선택이 비어 있으면 현재 UI 범위로 복구한다.
+        /// </summary>
+        private void HandleNavigationInput()
+        {
+            if (_eventSystem?.currentInputModule is InputSystemUIInputModule inputModule
+                && inputModule.move?.action != null
+                && inputModule.move.action.WasPerformedThisFrame())
+            {
+                _focusController?.EnsureSelectionForNavigation();
+            }
+        }
+
+        /// <summary>
+        /// 실제 활성 UI 계층으로 입력 점유 상태를 계산한다.
+        /// </summary>
+        private void UpdateInputCaptureState()
+        {
+            BaseUI topUi = GetTopInputUI();
+            UIInputCaptureReason reason = UIInputCaptureReason.None;
+            if (topUi != null)
+            {
+                switch (topUi.Layer)
+                {
+                    case UILayer.Background:
+                        reason = UIInputCaptureReason.Background;
+                        break;
+                    case UILayer.Screen:
+                        reason = UIInputCaptureReason.Screen;
+                        break;
+                    case UILayer.Popup:
+                        reason = UIInputCaptureReason.Popup;
+                        break;
+                    case UILayer.Overlay:
+                        reason = UIInputCaptureReason.Overlay;
+                        break;
+                    case UILayer.System:
+                        reason = UIInputCaptureReason.System;
+                        break;
+                }
+            }
+
+            UIInputCaptureState nextState = new UIInputCaptureState(
+                topUi != null,
+                reason,
+                _screenStack.Count,
+                _popupStack.Count);
+            if (_inputCaptureState == nextState)
+            {
+                return;
+            }
+
+            _inputCaptureState = nextState;
+            InputCaptureChanged?.Invoke(_inputCaptureState);
         }
     }
 }

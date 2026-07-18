@@ -10,6 +10,12 @@ namespace UIModule
         /// <summary>UI가 표시(활성화) 완료된 직후 발행. 인자는 표시된 UI 인스턴스.</summary>
         public static event System.Action<BaseUI> Presented;
 
+        /// <summary>UI가 숨겨지기 직전에 발행. 인자는 숨겨질 UI 인스턴스.</summary>
+        public static event System.Action<BaseUI> Hiding;
+
+        /// <summary>UI가 숨겨진 직후 발행. 인자는 숨겨진 UI 인스턴스.</summary>
+        public static event System.Action<BaseUI> Hidden;
+
         [Header("UI 기본 설정")]
         [SerializeField] protected UILayer layer;
         
@@ -66,11 +72,9 @@ namespace UIModule
         /// </summary>
         public virtual void Hide()
         {
-            // 디버깅: Hide() 호출 시 스택 추적
-            Debug.Log($"[{GetType().Name}] Hide() 호출됨. IsActive={IsActive}\n{System.Environment.StackTrace}");
-            
             if (!IsActive) return;
-            
+
+            Hiding?.Invoke(this);
             IsActive = false;
             OnHide();
             
@@ -80,6 +84,8 @@ namespace UIModule
             {
                 gameObject.SetActive(false);
             }
+
+            Hidden?.Invoke(this);
         }
         
         /// <summary>
@@ -87,8 +93,7 @@ namespace UIModule
         /// </summary>
         public virtual void Destroy()
         {
-            OnDestroy();
-            Destroy(gameObject);
+            UnityEngine.Object.Destroy(gameObject);
         }
 
         /// <summary>

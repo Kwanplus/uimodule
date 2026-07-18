@@ -17,6 +17,18 @@
     "email": "",
     "url": ""
   },
-  "dependencies": {},
-  "samples": []
+  "dependencies": {
+    "com.unity.inputsystem": "1.18.0",
+    "com.unity.ugui": "2.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Gamepad UI",
+      "description": "무설정 게임패드 UI와 선택형 복합 UI 확장 예제",
+      "path": "Samples~/GamepadUI"
+    }
+  ],
+  "testables": [
+    "com.kwan.uimodule"
+  ]
 }
