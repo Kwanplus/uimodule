@@ -86,6 +86,38 @@ namespace UIModule.Tests
                 InputSystem.RemoveDevice(gamepad);
             }
         }
+
+        /// <summary>
+        /// 중첩 Popup이 Hide를 거치지 않고 파괴돼도 모달 차단을 깊이별로 복구하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DestroyedNestedPopup_RestoresLowerModalState()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            FocusTestPopup firstPopup = manager.ShowPopup<FocusTestPopup>();
+            yield return null;
+            FocusTestPopup secondPopup = manager.ShowPopup<FocusTestPopup>();
+            yield return null;
+
+            Assert.That(screen.PrimaryButton.interactable, Is.False);
+            Assert.That(firstPopup.PrimaryButton.interactable, Is.False);
+
+            Object.Destroy(secondPopup.gameObject);
+            yield return null;
+            yield return null;
+
+            Assert.That(firstPopup.PrimaryButton.interactable, Is.True);
+            Assert.That(screen.PrimaryButton.interactable, Is.False);
+
+            Object.Destroy(firstPopup.gameObject);
+            yield return null;
+
+            Assert.That(screen.PrimaryButton.interactable, Is.True);
+        }
     }
 
     /// <summary>

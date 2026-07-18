@@ -1,0 +1,24 @@
+{
+    "name": "CustomUI",
+    "maps": [
+        {
+            "name": "CustomInterface",
+            "id": "6dcde861-482a-465e-9b38-0e6e554aa700",
+            "actions": [
+                { "name": "MoveSelection", "type": "Value", "id": "c3ccf824-cb5b-41aa-9977-fd5a9377b799", "expectedControlType": "Vector2", "processors": "", "interactions": "", "initialStateCheck": true },
+                { "name": "ConfirmSelection", "type": "Button", "id": "9179bea0-a61b-4fbb-b391-08e985eaf5fa", "expectedControlType": "Button", "processors": "", "interactions": "", "initialStateCheck": false },
+                { "name": "DismissPanel", "type": "Button", "id": "ca0f3cb3-241b-43d0-a2ae-7fb4b29d10a0", "expectedControlType": "Button", "processors": "", "interactions": "", "initialStateCheck": false }
+            ],
+            "bindings": [
+                { "name": "2D Vector", "id": "8e4cac55-76bc-4fd4-a6a7-dddb4a490042", "path": "2DVector", "action": "MoveSelection", "isComposite": true, "isPartOfComposite": false },
+                { "name": "up", "id": "2f3c56a4-9350-45bf-9131-a9f9f22c8b42", "path": "<Gamepad>/leftStick/up", "action": "MoveSelection", "isComposite": false, "isPartOfComposite": true },
+                { "name": "down", "id": "d2a455b5-d1b5-46a8-aa72-7fa3ee6fc09e", "path": "<Gamepad>/leftStick/down", "action": "MoveSelection", "isComposite": false, "isPartOfComposite": true },
+                { "name": "left", "id": "481247f5-0d70-4c37-ab0c-4716b7ab7ef7", "path": "<Gamepad>/leftStick/left", "action": "MoveSelection", "isComposite": false, "isPartOfComposite": true },
+                { "name": "right", "id": "66e5f181-4b0a-4992-b72b-ae85049e86e3", "path": "<Gamepad>/leftStick/right", "action": "MoveSelection", "isComposite": false, "isPartOfComposite": true },
+                { "name": "", "id": "7b4bce27-18a9-4563-aa13-1c177b3fbe59", "path": "<Gamepad>/buttonSouth", "action": "ConfirmSelection", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "04d7719e-db76-4811-9849-c6fa4266e16a", "path": "<Gamepad>/buttonEast", "action": "DismissPanel", "isComposite": false, "isPartOfComposite": false }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

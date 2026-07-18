@@ -14,7 +14,10 @@ namespace UIModule
     {
         private readonly UIManager _manager;
         private readonly Dictionary<BaseUI, GameObject> _lastSelectedByUi = new Dictionary<BaseUI, GameObject>();
-        private readonly Dictionary<BasePopup, Dictionary<Selectable, bool>> _disabledSelectablesByPopup = new Dictionary<BasePopup, Dictionary<Selectable, bool>>();
+        private readonly Dictionary<BasePopup, List<Selectable>> _blockedSelectablesByPopup = new Dictionary<BasePopup, List<Selectable>>();
+        private readonly Dictionary<Selectable, bool> _originalInteractableBySelectable = new Dictionary<Selectable, bool>();
+        private readonly Dictionary<Selectable, int> _modalBlockCounts = new Dictionary<Selectable, int>();
+        private bool _isDisposed;
 
         /// <summary>
         /// 포커스 controller를 생성한다.
@@ -29,6 +32,7 @@ namespace UIModule
         /// </summary>
         internal void HandleShown(BaseUI ui)
         {
+            AttachLifetimeRelay(ui);
             if (ui is BasePopup popup)
             {
                 BlockLowerSelectables(popup);
@@ -37,6 +41,18 @@ namespace UIModule
             else if (!(ui is BaseScreen))
             {
                 ScheduleFocus(ui);
+            }
+        }
+
+        /// <summary>
+        /// 새 Popup이 최상위가 되기 전 아래 UI의 마지막 선택을 기록한다.
+        /// </summary>
+        internal void HandleBeforePopupShown(BasePopup popup)
+        {
+            BaseUI lowerUi = _manager.GetTopInputUI();
+            if (lowerUi != null && lowerUi != popup)
+            {
+                RememberSelection(lowerUi);
             }
         }
 
@@ -71,7 +87,11 @@ namespace UIModule
         /// </summary>
         internal void HandleHidden(BaseUI ui)
         {
-            _lastSelectedByUi.Remove(ui);
+            if (ui is BasePopup)
+            {
+                _lastSelectedByUi.Remove(ui);
+            }
+
             BaseUI topUi = _manager.GetTopInputUI();
             if (topUi != null)
             {
@@ -140,6 +160,45 @@ namespace UIModule
         }
 
         /// <summary>
+        /// 외부 Destroy 또는 Pool clear로 UI가 제거될 때 호출한다.
+        /// </summary>
+        internal void HandleDestroyed(BaseUI ui)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            Forget(ui);
+            _manager.HandleExternallyDestroyedUi(ui);
+            BaseUI topUi = _manager.GetTopInputUI();
+            if (topUi != null)
+            {
+                ScheduleFocus(topUi);
+            }
+        }
+
+        /// <summary>
+        /// UIManager 종료 시 남은 모달 차단을 원상 복구한다.
+        /// </summary>
+        internal void Dispose()
+        {
+            _isDisposed = true;
+            foreach (KeyValuePair<Selectable, bool> pair in _originalInteractableBySelectable)
+            {
+                if (pair.Key != null)
+                {
+                    pair.Key.interactable = pair.Value;
+                }
+            }
+
+            _blockedSelectablesByPopup.Clear();
+            _originalInteractableBySelectable.Clear();
+            _modalBlockCounts.Clear();
+            _lastSelectedByUi.Clear();
+        }
+
+        /// <summary>
         /// 레이아웃이 반영된 다음 프레임 말미에 포커스를 적용한다.
         /// </summary>
         private void ScheduleFocus(BaseUI ui)
@@ -205,19 +264,29 @@ namespace UIModule
                 return;
             }
 
-            Dictionary<Selectable, bool> savedStates = new Dictionary<Selectable, bool>();
+            List<Selectable> blockedSelectables = new List<Selectable>();
             foreach (Selectable selectable in Selectable.allSelectablesArray)
             {
-                if (!IsSelectableValid(selectable) || IsWithin(popup, selectable.gameObject))
+                if (selectable == null
+                    || !selectable.gameObject.activeInHierarchy
+                    || IsWithin(popup, selectable.gameObject)
+                    || !_manager.IsManagedUiObject(selectable.gameObject))
                 {
                     continue;
                 }
 
-                savedStates.Add(selectable, selectable.interactable);
+                if (!_originalInteractableBySelectable.ContainsKey(selectable))
+                {
+                    _originalInteractableBySelectable.Add(selectable, selectable.interactable);
+                    _modalBlockCounts.Add(selectable, 0);
+                }
+
+                _modalBlockCounts[selectable]++;
+                blockedSelectables.Add(selectable);
                 selectable.interactable = false;
             }
 
-            _disabledSelectablesByPopup[popup] = savedStates;
+            _blockedSelectablesByPopup[popup] = blockedSelectables;
         }
 
         /// <summary>
@@ -225,20 +294,49 @@ namespace UIModule
         /// </summary>
         private void RestoreLowerSelectables(BasePopup popup)
         {
-            if (!_disabledSelectablesByPopup.TryGetValue(popup, out Dictionary<Selectable, bool> savedStates))
+            if (!_blockedSelectablesByPopup.TryGetValue(popup, out List<Selectable> blockedSelectables))
             {
                 return;
             }
 
-            foreach (KeyValuePair<Selectable, bool> pair in savedStates)
+            foreach (Selectable selectable in blockedSelectables)
             {
-                if (pair.Key != null)
+                if (selectable == null || !_modalBlockCounts.TryGetValue(selectable, out int count))
                 {
-                    pair.Key.interactable = pair.Value;
+                    continue;
                 }
+
+                count--;
+                if (count > 0)
+                {
+                    _modalBlockCounts[selectable] = count;
+                    continue;
+                }
+
+                if (_originalInteractableBySelectable.TryGetValue(selectable, out bool wasInteractable))
+                {
+                    selectable.interactable = wasInteractable;
+                }
+
+                _modalBlockCounts.Remove(selectable);
+                _originalInteractableBySelectable.Remove(selectable);
             }
 
-            _disabledSelectablesByPopup.Remove(popup);
+            _blockedSelectablesByPopup.Remove(popup);
+        }
+
+        /// <summary>
+        /// 외부 Destroy에서도 상태를 회수할 수 있도록 UI에 수명주기 relay를 붙인다.
+        /// </summary>
+        private void AttachLifetimeRelay(BaseUI ui)
+        {
+            UIFocusLifetimeRelay relay = ui.GetComponent<UIFocusLifetimeRelay>();
+            if (relay == null)
+            {
+                relay = ui.gameObject.AddComponent<UIFocusLifetimeRelay>();
+            }
+
+            relay.Initialize(this, ui);
         }
 
         /// <summary>

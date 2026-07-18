@@ -11,7 +11,7 @@ UIManager.Instance.ShowScreen<MainScreen>();
 UIManager.Instance.ShowPopup<SettingsPopup>();
 ```
 
-생성된 `InputSystemUIInputModule`은 Input System 내장 UI 액션을 fallback으로 사용합니다. 기존 EventSystem과 유효한 입력 모듈이 있으면 이를 변경하지 않습니다. 활성 입력 모듈이 없거나 여러 개인 구성은 Console 경고를 보고 하나의 UI 입력 모듈로 정리하세요.
+`UIInputBootstrap`이 생성한 `InputSystemUIInputModule`은 역할마다 **명시 설정 → 프로젝트 전역 `UI/*` 액션 → Input System 내장 UI 액션** 순으로 해석합니다. 기존 EventSystem과 유효한 입력 모듈이 있으면 이를 변경하지 않습니다. 활성 입력 모듈이 없거나 여러 개인 구성, 비호환 모듈, 필수 UI 역할 누락은 해결 방법과 함께 한 번만 Console에 진단됩니다.
 
 ## 선택 설정
 
@@ -39,7 +39,15 @@ uiManager.InputCaptureChanged += state =>
 };
 ```
 
+```csharp
+uiManager.InputDeviceChanged += state =>
+{
+    // LastInputDevice: Keyboard, Pointer, Gamepad, Touch, Other
+    // IsGamepadConnected: Gamepad 연결 여부
+};
+```
+
 ## 검증과 샘플
 
-- `Tools > UIModule > Validate Gamepad UI`에서 Default Selection, Navigation.None, 잘못된 Explicit 링크, ScrollRect 자동 노출 구성을 검사합니다.
-- Package Manager에서 **Gamepad UI** Sample을 import한 뒤 빈 Scene에 `GamepadUISampleBootstrap`을 추가해 무설정 흐름을 실행할 수 있습니다.
+- `Tools > UIModule > Validate Gamepad UI`에서 Default Selection, Navigation.None, 잘못된 Explicit 링크와 Navigation Group/ScrollRect 구성을 검사합니다. Scope가 없는 단순 UI는 정상 구성입니다.
+- Package Manager에서 **Gamepad UI** Sample을 import한 뒤 빈 Scene에 `GamepadUISampleBootstrap`을 추가해 무설정 흐름을 실행할 수 있습니다. 선택 설정 흐름은 샘플의 `OptionalInputConfigurationSample`과 `CustomUI.inputactions`를 사용합니다.

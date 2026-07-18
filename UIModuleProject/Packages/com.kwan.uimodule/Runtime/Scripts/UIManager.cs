@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 
 namespace UIModule
@@ -49,6 +50,7 @@ namespace UIModule
         
         // Background/Overlay/System은 타입당 1개 재사용을 보장하기 위한 캐시
         private Dictionary<System.Type, BaseUI> _singlePerTypeLayerCache = new Dictionary<System.Type, BaseUI>();
+        private List<BaseUI> _singleLayerPresentationOrder = new List<BaseUI>();
         
         // 프리팹 경로 설정 (기본값: Resources/UIPrefabs)
         [SerializeField] private string _prefabPathPrefix = "UIPrefabs/";
@@ -76,6 +78,7 @@ namespace UIModule
         private EventSystem _eventSystem;
         private UIFocusController _focusController;
         private UIInputCaptureState _inputCaptureState;
+        private UIInputDeviceState _inputDeviceState;
         private int _lastCancelFrame = -1;
 
         /// <summary>
@@ -97,6 +100,30 @@ namespace UIModule
         /// UI 입력 점유 상태가 바뀔 때 발행한다.
         /// </summary>
         public event System.Action<UIInputCaptureState> InputCaptureChanged;
+
+        /// <summary>
+        /// 마지막 UI 입력 장치와 Gamepad 연결 상태를 반환한다.
+        /// </summary>
+        public UIInputDeviceState InputDeviceState => _inputDeviceState;
+
+        /// <summary>
+        /// UI 입력 장치 상태가 바뀔 때 발행한다.
+        /// </summary>
+        public event System.Action<UIInputDeviceState> InputDeviceChanged;
+
+        /// <summary>
+        /// EventSystem 생성 전 선택 UI 입력 설정을 지정한다.
+        /// </summary>
+        public void SetInputConfiguration(UIInputConfiguration configuration)
+        {
+            if (_eventSystem != null)
+            {
+                Debug.LogWarning("[UIModule] UIInputConfiguration은 UIManager 초기화 전에 지정해야 합니다.");
+                return;
+            }
+
+            _inputConfiguration = configuration;
+        }
         
         private void Awake()
         {
@@ -111,6 +138,8 @@ namespace UIModule
                 BaseUI.Hidden += HandleUiHidden;
                 BaseScreen.ScreenBegan += HandleScreenBegan;
                 BaseScreen.ScreenResumed += HandleScreenResumed;
+                InputSystem.onDeviceChange += HandleInputDeviceChange;
+                UpdateInputDeviceState(UIInputDeviceType.None);
                 UpdateInputCaptureState();
             }
             else if (_instance != this)
@@ -131,17 +160,20 @@ namespace UIModule
             BaseUI.Hidden -= HandleUiHidden;
             BaseScreen.ScreenBegan -= HandleScreenBegan;
             BaseScreen.ScreenResumed -= HandleScreenResumed;
+            InputSystem.onDeviceChange -= HandleInputDeviceChange;
+            _focusController?.Dispose();
             _instance = null;
         }
 
         private void Update()
         {
-            HandleCancelInput();
+            TrackInputDevice();
             HandleNavigationInput();
         }
 
         private void LateUpdate()
         {
+            HandleCancelInput();
             _focusController?.ApplyPointerSelectionPolicy();
         }
         
@@ -322,7 +354,16 @@ namespace UIModule
                         {
                             _screenStack.Push(newScreen);
                             newScreen.Show();
-                            newScreen.NotifyScreenResumed();
+                            if (newScreen != previousScreen)
+                            {
+                                // 풀에서 다른 인스턴스를 받았다면 이전 화면의 런타임 동적 콘텐츠가
+                                // 존재한다는 보장이 없으므로 최초 구성 수명주기를 다시 실행한다.
+                                newScreen.NotifyScreenBegin();
+                            }
+                            else
+                            {
+                                newScreen.NotifyScreenResumed();
+                            }
                         }
                     }
                     else
@@ -386,6 +427,7 @@ namespace UIModule
             T newPopup = FindOrCreateUI<T>(UILayer.Popup);
             if (newPopup != null)
             {
+                _focusController?.HandleBeforePopupShown(newPopup);
                 _popupStack.Push(newPopup);
                 newPopup.Show();
                 UpdateInputCaptureState();
@@ -451,7 +493,7 @@ namespace UIModule
         /// </summary>
         internal void RemovePopupFromStack(BasePopup popup)
         {
-            if (_popupStack.Count > 0 && _popupStack.Peek() == popup)
+            if (_popupStack.Count > 0 && ReferenceEquals(_popupStack.Peek(), popup))
             {
                 _popupStack.Pop();
             }
@@ -464,7 +506,7 @@ namespace UIModule
                 while (_popupStack.Count > 0)
                 {
                     BasePopup p = _popupStack.Pop();
-                    if (p == popup && !found)
+                    if (ReferenceEquals(p, popup) && !found)
                     {
                         found = true;
                         continue; // 제거
@@ -478,8 +520,24 @@ namespace UIModule
                     _popupStack.Push(tempStack.Pop());
                 }
 
-            UpdateInputCaptureState();
             }
+
+            UpdateInputCaptureState();
+        }
+
+        /// <summary>
+        /// Hide를 거치지 않은 파괴 시 스택의 stale 참조를 정리한다.
+        /// </summary>
+        internal void HandleExternallyDestroyedUi(BaseUI ui)
+        {
+            if (ui is BasePopup popup)
+            {
+                RemovePopupFromStack(popup);
+                return;
+            }
+
+            _singleLayerPresentationOrder.Remove(ui);
+            UpdateInputCaptureState();
         }
         
         /// <summary>
@@ -502,6 +560,7 @@ namespace UIModule
                 {
                     if (!cachedUI.IsActive)
                     {
+                        TrackSingleLayerPresentation(cachedUI);
                         cachedUI.Show();
                     }
 
@@ -515,6 +574,7 @@ namespace UIModule
             if (ui != null)
             {
                 _singlePerTypeLayerCache[uiType] = ui;
+                TrackSingleLayerPresentation(ui);
                 ui.Show();
             }
 
@@ -526,6 +586,8 @@ namespace UIModule
         /// </summary>
         private BaseUI FindOrCreateUIByType(System.Type uiType, UILayer targetLayer)
         {
+            bool canReuseByType = targetLayer == UILayer.Screen || IsSinglePerTypeLayer(targetLayer);
+
             // Pooling 사용 시 풀에서 가져오기
             if (_usePooling)
             {
@@ -542,7 +604,7 @@ namespace UIModule
             }
             
             // 캐시에서 확인 (Pooling 미사용 시)
-            if (_uiInstanceCache.TryGetValue(uiType, out BaseUI cachedUI))
+            if (canReuseByType && _uiInstanceCache.TryGetValue(uiType, out BaseUI cachedUI))
             {
                 if (cachedUI != null && cachedUI.gameObject != null)
                 {
@@ -563,23 +625,26 @@ namespace UIModule
                 }
             }
             
-            // 씬에서 찾기 (리플렉션 사용)
+            // Screen 및 단일 레이어만 씬의 기존 인스턴스를 재사용한다.
+            // Popup은 같은 타입이라도 중첩될 수 있으므로 항상 별도 인스턴스를 만든다.
             BaseUI existingUI = null;
-            var findMethod = typeof(Object).GetMethod("FindObjectOfType", new System.Type[] { typeof(System.Type) });
-            if (findMethod != null)
+            if (canReuseByType)
             {
-                existingUI = findMethod.Invoke(null, new object[] { uiType }) as BaseUI;
-            }
-            else
-            {
-                // FindObjectOfType(Type)이 없으면 FindObjectsOfType 사용
-                var findObjectsMethod = typeof(Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type) });
-                if (findObjectsMethod != null)
+                var findMethod = typeof(Object).GetMethod("FindObjectOfType", new System.Type[] { typeof(System.Type) });
+                if (findMethod != null)
                 {
-                    BaseUI[] objects = findObjectsMethod.Invoke(null, new object[] { uiType }) as BaseUI[];
-                    if (objects != null && objects.Length > 0)
+                    existingUI = findMethod.Invoke(null, new object[] { uiType }) as BaseUI;
+                }
+                else
+                {
+                    var findObjectsMethod = typeof(Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type) });
+                    if (findObjectsMethod != null)
                     {
-                        existingUI = objects[0];
+                        BaseUI[] objects = findObjectsMethod.Invoke(null, new object[] { uiType }) as BaseUI[];
+                        if (objects != null && objects.Length > 0)
+                        {
+                            existingUI = objects[0];
+                        }
                     }
                 }
             }
@@ -593,7 +658,10 @@ namespace UIModule
                 }
 
                 ConfigureRectTransform(existingUI.GetComponent<RectTransform>(), targetLayer);
-                _uiInstanceCache[uiType] = existingUI;
+                if (canReuseByType)
+                {
+                    _uiInstanceCache[uiType] = existingUI;
+                }
                 return existingUI;
             }
             
@@ -605,7 +673,10 @@ namespace UIModule
                 : InstantiateFromPrefabByType(uiType, targetLayer);
             if (prefabInstance != null)
             {
-                _uiInstanceCache[uiType] = prefabInstance;
+                if (canReuseByType)
+                {
+                    _uiInstanceCache[uiType] = prefabInstance;
+                }
                 return prefabInstance;
             }
             
@@ -616,7 +687,10 @@ namespace UIModule
                 GameObject uiGO = new GameObject(uiType.Name, typeof(RectTransform));
                 uiGO.transform.SetParent(canvas.transform, false);
                 BaseUI newUI = uiGO.AddComponent(uiType) as BaseUI;
-                _uiInstanceCache[uiType] = newUI;
+                if (canReuseByType)
+                {
+                    _uiInstanceCache[uiType] = newUI;
+                }
                 return newUI;
             }
             
@@ -886,7 +960,13 @@ namespace UIModule
                 return overlayUi;
             }
 
-            if (_popupStack.Count > 0 && _popupStack.Peek() != null && _popupStack.Peek().IsActive)
+            while (_popupStack.Count > 0
+                && (_popupStack.Peek() == null || !_popupStack.Peek().IsActive))
+            {
+                _popupStack.Pop();
+            }
+
+            if (_popupStack.Count > 0)
             {
                 return _popupStack.Peek();
             }
@@ -901,11 +981,38 @@ namespace UIModule
         }
 
         /// <summary>
+        /// 대상이 이 UIManager가 소유한 레이어 Canvas 아래에 있는지 반환한다.
+        /// </summary>
+        internal bool IsManagedUiObject(GameObject target)
+        {
+            if (target == null)
+            {
+                return false;
+            }
+
+            foreach (Canvas canvas in _layerCanvases.Values)
+            {
+                if (target.transform.IsChildOf(canvas.transform))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// 코드에서 Cancel을 한 번 라우팅한다.
         /// </summary>
         /// <returns>Cancel을 UI가 처리했으면 true다.</returns>
         public bool TryRouteCancel()
         {
+            if (_lastCancelFrame == Time.frameCount)
+            {
+                return false;
+            }
+
+            _lastCancelFrame = Time.frameCount;
             BaseUI targetUi = GetTopInputUI();
             if (targetUi == null)
             {
@@ -945,8 +1052,9 @@ namespace UIModule
         /// </summary>
         private BaseUI GetActiveSingleLayerUI(UILayer layer)
         {
-            foreach (BaseUI ui in _singlePerTypeLayerCache.Values)
+            for (int index = _singleLayerPresentationOrder.Count - 1; index >= 0; index--)
             {
+                BaseUI ui = _singleLayerPresentationOrder[index];
                 if (ui != null && ui.Layer == layer && ui.IsActive)
                 {
                     return ui;
@@ -954,6 +1062,15 @@ namespace UIModule
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Dictionary 순서 대신 실제 마지막 표시 순서로 단일 레이어 입력 우선순위를 결정한다.
+        /// </summary>
+        private void TrackSingleLayerPresentation(BaseUI ui)
+        {
+            _singleLayerPresentationOrder.Remove(ui);
+            _singleLayerPresentationOrder.Add(ui);
         }
 
         /// <summary>
@@ -1011,7 +1128,6 @@ namespace UIModule
                 return;
             }
 
-            _lastCancelFrame = Time.frameCount;
             GameObject selected = _eventSystem.currentSelectedGameObject;
             if (selected != null && ExecuteEvents.CanHandleEvent<ICancelHandler>(selected))
             {
@@ -1032,6 +1148,102 @@ namespace UIModule
             {
                 _focusController?.EnsureSelectionForNavigation();
             }
+        }
+
+        /// <summary>
+        /// UI 입력 액션에서 마지막 사용 장치를 갱신한다.
+        /// </summary>
+        private void TrackInputDevice()
+        {
+            if (!(_eventSystem?.currentInputModule is InputSystemUIInputModule inputModule))
+            {
+                return;
+            }
+
+            TrackInputDevice(inputModule.move?.action);
+            TrackInputDevice(inputModule.submit?.action);
+            TrackInputDevice(inputModule.cancel?.action);
+            TrackInputDevice(inputModule.point?.action);
+            TrackInputDevice(inputModule.leftClick?.action);
+        }
+
+        /// <summary>
+        /// 이번 프레임에 수행된 액션의 장치 종류를 반영한다.
+        /// </summary>
+        private void TrackInputDevice(InputAction action)
+        {
+            if (action == null || !action.WasPerformedThisFrame() || action.activeControl == null)
+            {
+                return;
+            }
+
+            UpdateInputDeviceState(GetDeviceType(action.activeControl.device));
+        }
+
+        /// <summary>
+        /// 장치 연결 상태 변화에 맞춰 공개 상태와 포커스를 갱신한다.
+        /// </summary>
+        private void HandleInputDeviceChange(InputDevice device, InputDeviceChange change)
+        {
+            if (!(device is Gamepad))
+            {
+                return;
+            }
+
+            if (change == InputDeviceChange.Added || change == InputDeviceChange.Reconnected)
+            {
+                UpdateInputDeviceState(UIInputDeviceType.Gamepad);
+                _focusController?.EnsureSelectionForNavigation();
+                return;
+            }
+
+            if (change == InputDeviceChange.Removed || change == InputDeviceChange.Disconnected)
+            {
+                UpdateInputDeviceState(_inputDeviceState.LastInputDevice);
+            }
+        }
+
+        /// <summary>
+        /// Input System 장치를 공개 UI 장치 유형으로 변환한다.
+        /// </summary>
+        private static UIInputDeviceType GetDeviceType(InputDevice device)
+        {
+            if (device is Gamepad)
+            {
+                return UIInputDeviceType.Gamepad;
+            }
+
+            if (device is Keyboard)
+            {
+                return UIInputDeviceType.Keyboard;
+            }
+
+            if (device is Pointer)
+            {
+                return UIInputDeviceType.Pointer;
+            }
+
+            if (device is Touchscreen)
+            {
+                return UIInputDeviceType.Touch;
+            }
+
+            return UIInputDeviceType.Other;
+        }
+
+        /// <summary>
+        /// 입력 장치 상태를 변경 이벤트와 함께 갱신한다.
+        /// </summary>
+        private void UpdateInputDeviceState(UIInputDeviceType deviceType)
+        {
+            UIInputDeviceState nextState = new UIInputDeviceState(deviceType, Gamepad.all.Count > 0);
+            if (_inputDeviceState.Equals(nextState))
+            {
+                return;
+            }
+
+            _inputDeviceState = nextState;
+            InputDeviceChanged?.Invoke(_inputDeviceState);
         }
 
         /// <summary>
