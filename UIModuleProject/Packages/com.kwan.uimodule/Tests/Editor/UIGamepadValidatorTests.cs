@@ -155,6 +155,31 @@ namespace UIModule.Editor.Tests
         }
 
         /// <summary>
+        /// 비어 있는 Navigation Group 배열은 하위 Selectable을 자동 관리 대상으로 사용하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void ValidateGameObject_SkipsNavigationNoneForAutoCollectedMember()
+        {
+            GameObject root = new GameObject("ValidationRoot", typeof(RectTransform), typeof(TestValidationUI), typeof(UILinearNavigation));
+            try
+            {
+                Button managedButton = CreateButton("Managed", root.transform);
+                Navigation navigation = managedButton.navigation;
+                navigation.mode = Navigation.Mode.None;
+                managedButton.navigation = navigation;
+
+                var issues = UIGamepadValidator.ValidateGameObject(root);
+
+                Assert.That(ContainsMessage(issues, "Navigation이 None"), Is.False);
+                Assert.That(ContainsMessage(issues, "Navigation Group에 유효한 Selectable"), Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// 테스트용 Button을 생성한다.
         /// </summary>
         private static Button CreateButton(string name, Transform parent)

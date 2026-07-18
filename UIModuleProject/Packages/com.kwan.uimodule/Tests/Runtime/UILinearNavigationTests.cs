@@ -38,6 +38,34 @@ namespace UIModule.Tests
         }
 
         /// <summary>
+        /// helper 비활성화 시 기존 Automatic Navigation을 복원하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void Disable_RestoresOriginalAutomaticNavigation()
+        {
+            GameObject root = new GameObject("Root", typeof(RectTransform));
+            try
+            {
+                Button first = CreateButton("First", root.transform);
+                Button second = CreateButton("Second", root.transform);
+                UILinearNavigation navigation = root.AddComponent<UILinearNavigation>();
+
+                Assert.That(first.navigation.mode, Is.EqualTo(Navigation.Mode.Explicit));
+                Assert.That(first.navigation.selectOnDown, Is.EqualTo(second));
+
+                navigation.enabled = false;
+
+                Assert.That(first.navigation.mode, Is.EqualTo(Navigation.Mode.Automatic));
+                Assert.That(first.navigation.selectOnDown, Is.Null);
+                Assert.That(second.navigation.mode, Is.EqualTo(Navigation.Mode.Automatic));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// 테스트용 Button을 생성한다.
         /// </summary>
         private static Button CreateButton(string name, Transform parent)

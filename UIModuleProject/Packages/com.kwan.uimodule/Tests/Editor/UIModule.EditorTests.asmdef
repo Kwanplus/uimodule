@@ -3,7 +3,8 @@
     "rootNamespace": "UIModule.Editor.Tests",
     "references": [
         "UIModule.Runtime",
-        "UIModule.Editor"
+        "UIModule.Editor",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [
         "Editor"

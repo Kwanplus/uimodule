@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -59,6 +60,23 @@ namespace UIModule.Tests
         }
 
         /// <summary>
+        /// 초기화 단계에 구성된 정적 Screen의 최초 Selectable을 선택하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator StaticScreen_SelectsFirstSelectable()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+
+            StaticFocusTestScreen screen = manager.ShowScreen<StaticFocusTestScreen>();
+            yield return null;
+
+            Assert.That(
+                manager.EventSystem.currentSelectedGameObject,
+                Is.EqualTo(screen.PrimaryButton.gameObject));
+        }
+
+        /// <summary>
         /// 내장 기본 액션이 가상 Gamepad Submit을 선택된 Button으로 전달하는지 검증한다.
         /// </summary>
         [UnityTest]
@@ -98,7 +116,7 @@ namespace UIModule.Tests
             FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
             yield return null;
 
-            FocusTestPopup firstPopup = manager.ShowPopup<FocusTestPopup>();
+            PooledFocusTestPopup firstPopup = manager.ShowPopup<PooledFocusTestPopup>();
             yield return null;
             FocusTestPopup secondPopup = manager.ShowPopup<FocusTestPopup>();
             yield return null;
@@ -179,6 +197,242 @@ namespace UIModule.Tests
 
             Assert.That(manager.TryRouteCancel(), Is.True);
             Assert.That(invokeCount, Is.EqualTo(1));
+        }
+
+        /// <summary>
+        /// Touch 입력도 포인터 선택 유지 정책에 따라 현재 선택을 해제하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator TouchPress_WhenSelectionIsNotKept_ClearsSelection()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            screen.gameObject
+                .AddComponent<UIFocusScope>()
+                .Configure(screen.PrimaryButton, UICancelBehavior.Default, false);
+            manager.EventSystem.SetSelectedGameObject(screen.PrimaryButton.gameObject);
+            Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+            try
+            {
+                InputSystem.QueueStateEvent(touchscreen, new TouchState
+                {
+                    touchId = 1,
+                    phase = UnityEngine.InputSystem.TouchPhase.Began,
+                    position = new Vector2(120f, 80f),
+                    pressure = 1f
+                });
+                InputSystem.Update();
+                ApplyPointerSelectionPolicy(manager);
+
+                Assert.That(manager.EventSystem.currentSelectedGameObject, Is.Null);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(touchscreen);
+            }
+        }
+
+        /// <summary>
+        /// 저장된 선택이 파괴되면 같은 Screen의 유효한 대상으로 복구하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PopupClose_WithDestroyedRememberedSelection_UsesFallback()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            manager.EventSystem.SetSelectedGameObject(screen.SecondaryButton.gameObject);
+            FocusTestPopup popup = manager.ShowPopup<FocusTestPopup>();
+            yield return null;
+            Object.Destroy(screen.SecondaryButton.gameObject);
+            popup.Close();
+            yield return null;
+            yield return null;
+
+            Assert.That(manager.EventSystem.currentSelectedGameObject, Is.EqualTo(screen.PrimaryButton.gameObject));
+        }
+
+        /// <summary>
+        /// UIManager를 거치지 않은 Popup 표시도 스택에 등록하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DirectPopupShow_RegistersPopupStack()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            GameObject popupObject = new GameObject("DirectPopup", typeof(RectTransform), typeof(FocusTestPopup));
+            popupObject.transform.SetParent(manager.GetLayerCanvas(UILayer.Popup).transform, false);
+            FocusTestPopup popup = popupObject.GetComponent<FocusTestPopup>();
+            LogAssert.Expect(
+                LogType.Warning,
+                "[UIModule] BasePopup.Show() 직접 호출을 감지했습니다. UIManager.ShowPopup(popup)을 사용해 Popup 표시를 등록하세요.");
+
+            popup.Show();
+            yield return null;
+
+            Assert.That(manager.GetPopupCount(), Is.EqualTo(1));
+            Assert.That(manager.IsInputCaptured, Is.True);
+            popup.Close();
+            yield return null;
+        }
+
+        /// <summary>
+        /// 외부 생성 Popup을 명시 API로 경고 없이 스택에 등록하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ShowPopupInstance_RegistersPopupStack()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            GameObject popupObject = new GameObject("ExternalPopup", typeof(RectTransform), typeof(FocusTestPopup));
+            popupObject.transform.SetParent(manager.GetLayerCanvas(UILayer.Popup).transform, false);
+            FocusTestPopup popup = popupObject.GetComponent<FocusTestPopup>();
+
+            manager.ShowPopup(popup);
+            yield return null;
+
+            Assert.That(manager.GetPopupCount(), Is.EqualTo(1));
+            Assert.That(manager.IsInputCaptured, Is.True);
+            popup.Close();
+            yield return null;
+        }
+
+        /// <summary>
+        /// 현재 Screen이 강제 파괴돼도 Screen 스택과 입력 점유 상태를 정리하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DestroyedScreen_ClearsStackAndCaptureState()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            FocusTestScreen screen = manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            Object.Destroy(screen.gameObject);
+            yield return null;
+
+            Assert.That(manager.GetScreenStackCount(), Is.Zero);
+            Assert.That(manager.IsInputCaptured, Is.False);
+        }
+
+        /// <summary>
+        /// Popup을 Pool에 반환한 뒤 스택과 포커스를 정리하고 같은 인스턴스를 재사용하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PopupPool_ReturnsAndReusesCleanInstance()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(true);
+
+            PooledFocusTestPopup firstPopup = manager.ShowPopup<PooledFocusTestPopup>();
+            yield return null;
+            Assert.That(manager.GetPopupCount(), Is.EqualTo(1));
+            Assert.That(manager.EventSystem.currentSelectedGameObject, Is.EqualTo(firstPopup.PrimaryButton.gameObject));
+
+            firstPopup.Close();
+            yield return null;
+            Assert.That(manager.GetPopupCount(), Is.Zero);
+            Assert.That(manager.IsInputCaptured, Is.False);
+
+            PooledFocusTestPopup reusedPopup = manager.ShowPopup<PooledFocusTestPopup>();
+            yield return null;
+
+            Assert.That(reusedPopup, Is.SameAs(firstPopup));
+            Assert.That(manager.GetPopupCount(), Is.EqualTo(1));
+            Assert.That(manager.EventSystem.currentSelectedGameObject, Is.EqualTo(reusedPopup.PrimaryButton.gameObject));
+        }
+
+        /// <summary>
+        /// 실제 UI 액션과 Gamepad 연결 변화가 공개 장치 상태에 반영되는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator InputDevices_UpdateLastDeviceAndGamepadConnection()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            Mouse mouse = InputSystem.AddDevice<Mouse>();
+            Touchscreen touchscreen = InputSystem.AddDevice<Touchscreen>();
+            bool wasGamepadConnected = manager.InputDeviceState.IsGamepadConnected;
+            Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+            try
+            {
+                UpdateTrackedDevice(manager, keyboard);
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Keyboard));
+
+                UpdateTrackedDevice(manager, mouse);
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Pointer));
+
+                UpdateTrackedDevice(manager, touchscreen);
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Touch));
+
+                UpdateTrackedDevice(manager, gamepad);
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Gamepad));
+                Assert.That(manager.InputDeviceState.IsGamepadConnected, Is.True);
+
+                InputSystem.RemoveDevice(gamepad);
+                yield return null;
+                Assert.That(manager.InputDeviceState.IsGamepadConnected, Is.EqualTo(wasGamepadConnected));
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Gamepad));
+                gamepad = null;
+            }
+            finally
+            {
+                if (gamepad != null && gamepad.added)
+                {
+                    InputSystem.RemoveDevice(gamepad);
+                }
+
+                InputSystem.RemoveDevice(touchscreen);
+                InputSystem.RemoveDevice(mouse);
+                InputSystem.RemoveDevice(keyboard);
+            }
+        }
+
+        /// <summary>
+        /// 입력 장치 분류 결과를 공개 상태 갱신 경로에 전달한다.
+        /// </summary>
+        private static void UpdateTrackedDevice(UIManager manager, InputDevice device)
+        {
+            UIInputDeviceType deviceType = (UIInputDeviceType)typeof(UIManager)
+                .GetMethod(
+                    "GetDeviceType",
+                    BindingFlags.Static | BindingFlags.NonPublic)
+                ?.Invoke(null, new object[] { device });
+            typeof(UIManager)
+                .GetMethod(
+                    "UpdateInputDeviceState",
+                    BindingFlags.Instance | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(UIInputDeviceType?) },
+                    null)
+                ?.Invoke(manager, new object[] { (UIInputDeviceType?)deviceType });
+        }
+
+        /// <summary>
+        /// 현재 Input System 프레임에서 포인터 선택 정책을 즉시 적용한다.
+        /// </summary>
+        private static void ApplyPointerSelectionPolicy(UIManager manager)
+        {
+            object focusController = typeof(UIManager)
+                .GetField("_focusController", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(manager);
+            focusController
+                ?.GetType()
+                .GetMethod(
+                    "ApplyPointerSelectionPolicy",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.Invoke(focusController, null);
         }
     }
 

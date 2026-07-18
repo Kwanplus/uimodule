@@ -70,6 +70,72 @@ namespace UIModule.Tests
             Assert.That(manager.TryRouteCancel(), Is.True);
             Assert.That(manager.TryRouteCancel(), Is.False);
         }
+
+        /// <summary>
+        /// Popup이 없을 때 CloseTopPopup이 Screen 스택을 변경하지 않는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CloseTopPopup_WithoutPopup_DoesNotNavigateScreen()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            int screenCount = manager.GetScreenStackCount();
+            manager.CloseTopPopup();
+            yield return null;
+
+            Assert.That(manager.GetPopupCount(), Is.Zero);
+            Assert.That(manager.GetScreenStackCount(), Is.EqualTo(screenCount));
+        }
+
+        /// <summary>
+        /// CloseTopPopup이 등록된 최상위 Popup만 닫는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CloseTopPopup_WithPopup_ClosesTopPopup()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            EmptyTestPopup popup = manager.ShowPopup<EmptyTestPopup>();
+            yield return null;
+
+            manager.CloseTopPopup();
+            yield return null;
+
+            Assert.That(popup.IsActive, Is.False);
+            Assert.That(manager.GetPopupCount(), Is.Zero);
+        }
+
+        /// <summary>
+        /// timeScale이 0이어도 Cancel 라우팅이 동작하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CancelAtPausedTime_ClosesTopPopup()
+        {
+            float previousTimeScale = Time.timeScale;
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            EmptyTestPopup popup = manager.ShowPopup<EmptyTestPopup>();
+            yield return null;
+
+            try
+            {
+                Time.timeScale = 0f;
+                Assert.That(manager.TryRouteCancel(), Is.True);
+                yield return null;
+
+                Assert.That(popup.IsActive, Is.False);
+            }
+            finally
+            {
+                Time.timeScale = previousTimeScale;
+            }
+        }
     }
 
     /// <summary>

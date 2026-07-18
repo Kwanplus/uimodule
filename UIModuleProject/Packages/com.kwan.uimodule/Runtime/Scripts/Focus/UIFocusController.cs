@@ -130,7 +130,12 @@ namespace UIModule
         /// </summary>
         internal void ApplyPointerSelectionPolicy()
         {
-            if (Pointer.current == null || !Pointer.current.press.wasPressedThisFrame)
+            bool pointerPressed = Pointer.current != null
+                && Pointer.current.press.wasPressedThisFrame;
+            bool touchPressed = Touchscreen.current != null
+                && Touchscreen.current.primaryTouch.phase.ReadValue()
+                == UnityEngine.InputSystem.TouchPhase.Began;
+            if (!pointerPressed && !touchPressed)
             {
                 return;
             }

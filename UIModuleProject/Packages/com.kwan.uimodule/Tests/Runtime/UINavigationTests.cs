@@ -1,3 +1,4 @@
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
@@ -59,6 +60,44 @@ namespace UIModule.Tests
         }
 
         /// <summary>
+        /// 선택 항목이 Viewport 밖에 있으면 Content를 노출 방향으로 이동하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void EnsureVisible_MovesContentForOffscreenSelection()
+        {
+            GameObject root = new GameObject("ScrollRect", typeof(RectTransform), typeof(ScrollRect));
+            try
+            {
+                RectTransform rootRect = root.GetComponent<RectTransform>();
+                rootRect.sizeDelta = new Vector2(100f, 100f);
+                RectTransform viewport = CreateRectTransform("Viewport", root.transform, new Vector2(100f, 100f));
+                RectTransform content = CreateRectTransform("Content", viewport, new Vector2(100f, 300f));
+                RectTransform item = CreateRectTransform("Item", content, new Vector2(20f, 20f));
+                item.anchoredPosition = new Vector2(0f, -120f);
+                item.gameObject.AddComponent<Image>();
+                item.gameObject.AddComponent<Button>();
+
+                ScrollRect scrollRect = root.GetComponent<ScrollRect>();
+                scrollRect.viewport = viewport;
+                scrollRect.content = content;
+                scrollRect.horizontal = false;
+                scrollRect.vertical = true;
+                UIEnsureVisibleInScrollRect helper = item.gameObject.AddComponent<UIEnsureVisibleInScrollRect>();
+                typeof(UIEnsureVisibleInScrollRect)
+                    .GetField("_scrollRect", BindingFlags.Instance | BindingFlags.NonPublic)
+                    ?.SetValue(helper, scrollRect);
+
+                helper.EnsureVisible();
+
+                Assert.That(content.anchoredPosition.y, Is.GreaterThan(0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// 위치를 가진 테스트 Button을 만든다.
         /// </summary>
         private static Button CreateButton(string name, Transform parent, Vector2 position)
@@ -67,6 +106,18 @@ namespace UIModule.Tests
             buttonObject.transform.SetParent(parent, false);
             ((RectTransform)buttonObject.transform).anchoredPosition = position;
             return buttonObject.GetComponent<Button>();
+        }
+
+        /// <summary>
+        /// 지정한 크기의 테스트 RectTransform을 만든다.
+        /// </summary>
+        private static RectTransform CreateRectTransform(string name, Transform parent, Vector2 size)
+        {
+            GameObject gameObject = new GameObject(name, typeof(RectTransform));
+            gameObject.transform.SetParent(parent, false);
+            RectTransform rectTransform = gameObject.GetComponent<RectTransform>();
+            rectTransform.sizeDelta = size;
+            return rectTransform;
         }
     }
 }
