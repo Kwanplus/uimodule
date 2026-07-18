@@ -45,6 +45,78 @@ namespace UIModule.Editor.Tests
                 Object.DestroyImmediate(root);
             }
         }
+
+        /// <summary>
+        /// Explicit Navigation이 상호작용 불가 대상을 가리킬 때 경고하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void ValidateGameObject_ReportsExplicitLinkToNonInteractableTarget()
+        {
+            GameObject root = new GameObject("ValidationRoot", typeof(RectTransform), typeof(TestValidationUI));
+            try
+            {
+                Button source = CreateButton("Source", root.transform);
+                Button target = CreateButton("Target", root.transform);
+                target.interactable = false;
+                Navigation navigation = source.navigation;
+                navigation.mode = Navigation.Mode.Explicit;
+                navigation.selectOnDown = target;
+                source.navigation = navigation;
+
+                var issues = UIGamepadValidator.ValidateGameObject(root);
+
+                Assert.That(ContainsMessage(issues, "Explicit Down"), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// 대상 없는 Navigation Group을 경고하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void ValidateGameObject_ReportsEmptyNavigationGroup()
+        {
+            GameObject root = new GameObject("ValidationRoot", typeof(RectTransform), typeof(TestValidationUI), typeof(UIGridNavigation));
+            try
+            {
+                var issues = UIGamepadValidator.ValidateGameObject(root);
+
+                Assert.That(ContainsMessage(issues, "Navigation Group에 유효한 Selectable"), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// 테스트용 Button을 생성한다.
+        /// </summary>
+        private static Button CreateButton(string name, Transform parent)
+        {
+            GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            buttonObject.transform.SetParent(parent, false);
+            return buttonObject.GetComponent<Button>();
+        }
+
+        /// <summary>
+        /// 검증 결과에 지정한 메시지가 있는지 반환한다.
+        /// </summary>
+        private static bool ContainsMessage(System.Collections.Generic.IReadOnlyList<UIGamepadValidationIssue> issues, string message)
+        {
+            foreach (UIGamepadValidationIssue issue in issues)
+            {
+                if (issue.Message.Contains(message))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     /// <summary>

@@ -64,6 +64,7 @@ namespace UIModule.Editor
             {
                 ValidateFocusScope(uiRoot, issues);
                 ValidateSelectables(uiRoot, issues);
+                ValidateNavigationGroups(uiRoot, issues);
                 ValidateEnsureVisible(uiRoot, issues);
             }
 
@@ -82,7 +83,7 @@ namespace UIModule.Editor
             }
 
             if (!scope.DefaultSelection.transform.IsChildOf(uiRoot.transform)
-                || !scope.DefaultSelection.gameObject.activeSelf
+                || !scope.DefaultSelection.gameObject.activeInHierarchy
                 || !scope.DefaultSelection.IsInteractable())
             {
                 issues.Add(new UIGamepadValidationIssue(
@@ -105,7 +106,7 @@ namespace UIModule.Editor
                 }
 
                 Navigation navigation = selectable.navigation;
-                if (navigation.mode == Navigation.Mode.None)
+                if (navigation.mode == Navigation.Mode.None && !IsManagedByNavigationGroup(uiRoot, selectable))
                 {
                     issues.Add(new UIGamepadValidationIssue(
                         selectable.name,
@@ -133,12 +134,153 @@ namespace UIModule.Editor
                 return;
             }
 
-            if (!target.transform.IsChildOf(uiRoot.transform) || !target.gameObject.activeSelf)
+            if (!target.transform.IsChildOf(uiRoot.transform)
+                || !target.gameObject.activeInHierarchy
+                || !target.IsInteractable())
             {
                 issues.Add(new UIGamepadValidationIssue(
                     source.name,
                     $"Explicit {direction} 링크가 비활성 또는 다른 UI 범위의 Selectable을 가리킵니다."));
             }
+        }
+
+        /// <summary>
+        /// Navigation Group 대상과 그룹별 구성을 검사한다.
+        /// </summary>
+        private static void ValidateNavigationGroups(BaseUI uiRoot, List<UIGamepadValidationIssue> issues)
+        {
+            UINavigationGroup[] groups = uiRoot.GetComponentsInChildren<UINavigationGroup>(true);
+            foreach (UINavigationGroup group in groups)
+            {
+                SerializedObject serializedGroup = new SerializedObject(group);
+                SerializedProperty selectablesProperty = serializedGroup.FindProperty("_selectables");
+                List<Selectable> targets = new List<Selectable>();
+                if (selectablesProperty != null && selectablesProperty.arraySize > 0)
+                {
+                    HashSet<Selectable> uniqueTargets = new HashSet<Selectable>();
+                    for (int index = 0; index < selectablesProperty.arraySize; index++)
+                    {
+                        Selectable target = selectablesProperty.GetArrayElementAtIndex(index).objectReferenceValue as Selectable;
+                        if (target == null)
+                        {
+                            AddGroupIssue(group, issues, "Navigation Group 대상에 null 항목이 있습니다.");
+                            continue;
+                        }
+
+                        if (!uniqueTargets.Add(target))
+                        {
+                            AddGroupIssue(group, issues, "Navigation Group 대상에 중복 Selectable이 있습니다.");
+                            continue;
+                        }
+
+                        if (!target.transform.IsChildOf(uiRoot.transform)
+                            || !target.gameObject.activeInHierarchy
+                            || !target.IsInteractable())
+                        {
+                            AddGroupIssue(group, issues, "Navigation Group 대상은 같은 UI 범위의 활성 상호작용 가능 Selectable이어야 합니다.");
+                            continue;
+                        }
+
+                        targets.Add(target);
+                    }
+                }
+                else
+                {
+                    foreach (Selectable selectable in group.GetComponentsInChildren<Selectable>(true))
+                    {
+                        if (selectable.gameObject.activeInHierarchy && selectable.IsInteractable())
+                        {
+                            targets.Add(selectable);
+                        }
+                    }
+                }
+
+                if (targets.Count == 0)
+                {
+                    AddGroupIssue(group, issues, "Navigation Group에 유효한 Selectable이 없습니다.");
+                }
+
+                ValidateGridNavigation(group, targets.Count, serializedGroup, issues);
+                ValidateSpatialNavigation(group, targets, issues);
+            }
+        }
+
+        /// <summary>
+        /// Grid Navigation의 열 수와 불완전 행을 검사한다.
+        /// </summary>
+        private static void ValidateGridNavigation(
+            UINavigationGroup group,
+            int targetCount,
+            SerializedObject serializedGroup,
+            List<UIGamepadValidationIssue> issues)
+        {
+            if (!(group is UIGridNavigation))
+            {
+                return;
+            }
+
+            SerializedProperty columnsProperty = serializedGroup.FindProperty("_columnCount");
+            int columns = columnsProperty == null ? 0 : columnsProperty.intValue;
+            if (columns <= 0)
+            {
+                AddGroupIssue(group, issues, "Grid Navigation의 Column Count는 1 이상이어야 합니다.");
+                return;
+            }
+
+            if (targetCount > columns && targetCount % columns != 0)
+            {
+                AddGroupIssue(group, issues, "Grid Navigation의 마지막 행이 불완전합니다. Vertical Wrap 동작을 확인하세요.");
+            }
+        }
+
+        /// <summary>
+        /// Spatial Navigation에서 같은 좌표에 있는 대상을 검사한다.
+        /// </summary>
+        private static void ValidateSpatialNavigation(
+            UINavigationGroup group,
+            List<Selectable> targets,
+            List<UIGamepadValidationIssue> issues)
+        {
+            if (!(group is UISpatialNavigation))
+            {
+                return;
+            }
+
+            for (int left = 0; left < targets.Count; left++)
+            {
+                for (int right = left + 1; right < targets.Count; right++)
+                {
+                    if (Vector2.Distance(targets[left].transform.position, targets[right].transform.position) <= Mathf.Epsilon)
+                    {
+                        AddGroupIssue(group, issues, "Spatial Navigation 대상에 같은 위치의 Selectable이 있습니다.");
+                        return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Navigation.None을 런타임에 재구성하는 대상인지 반환한다.
+        /// </summary>
+        private static bool IsManagedByNavigationGroup(BaseUI uiRoot, Selectable selectable)
+        {
+            foreach (UINavigationGroup group in uiRoot.GetComponentsInChildren<UINavigationGroup>(true))
+            {
+                if (selectable.transform.IsChildOf(group.transform))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Navigation Group 관련 경고를 추가한다.
+        /// </summary>
+        private static void AddGroupIssue(UINavigationGroup group, List<UIGamepadValidationIssue> issues, string message)
+        {
+            issues.Add(new UIGamepadValidationIssue(group.name, message));
         }
 
         /// <summary>
@@ -149,11 +291,30 @@ namespace UIModule.Editor
             UIEnsureVisibleInScrollRect[] helpers = uiRoot.GetComponentsInChildren<UIEnsureVisibleInScrollRect>(true);
             foreach (UIEnsureVisibleInScrollRect helper in helpers)
             {
-                if (helper.GetComponentInParent<ScrollRect>() == null)
+                SerializedObject serializedHelper = new SerializedObject(helper);
+                ScrollRect scrollRect = serializedHelper.FindProperty("_scrollRect")?.objectReferenceValue as ScrollRect;
+                if (scrollRect == null)
                 {
                     issues.Add(new UIGamepadValidationIssue(
                         helper.name,
-                        "UIEnsureVisibleInScrollRect는 ScrollRect 하위 Selectable에 배치해야 합니다."));
+                        "UIEnsureVisibleInScrollRect의 ScrollRect 참조를 지정하세요."));
+                    continue;
+                }
+
+                if (scrollRect.viewport == null || scrollRect.content == null)
+                {
+                    issues.Add(new UIGamepadValidationIssue(
+                        helper.name,
+                        "ScrollRect에는 Viewport와 Content가 모두 지정되어야 합니다."));
+                    continue;
+                }
+
+                if (helper.GetComponent<Selectable>() == null
+                    || !helper.transform.IsChildOf(scrollRect.content))
+                {
+                    issues.Add(new UIGamepadValidationIssue(
+                        helper.name,
+                        "UIEnsureVisibleInScrollRect는 ScrollRect Content 아래의 Selectable에 배치해야 합니다."));
                 }
             }
         }

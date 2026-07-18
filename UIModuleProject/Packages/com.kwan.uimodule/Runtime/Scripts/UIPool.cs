@@ -177,11 +177,19 @@ namespace UIModule
         /// </summary>
         public void Clear()
         {
-            // 활성화된 인스턴스 모두 반환
+            // 활성 인스턴스는 Hide 수명주기를 거쳐야 UIManager의 Popup 스택,
+            // 포커스 기록, 모달 차단이 함께 정리된다.
             var activeList = new List<BaseUI>(_activeInstances);
             foreach (var instance in activeList)
             {
-                Return(instance);
+                if (instance != null && instance.IsActive)
+                {
+                    instance.Hide();
+                }
+                else
+                {
+                    Return(instance);
+                }
             }
             
             // 모든 인스턴스 제거

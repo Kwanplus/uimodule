@@ -34,72 +34,105 @@ namespace UIModule
             eventSystem = eventSystemObject.AddComponent<EventSystem>();
 
             InputSystemUIInputModule inputModule = eventSystemObject.AddComponent<InputSystemUIInputModule>();
-            ConfigureOwnedInputModule(inputModule, configuration);
+            UIInputActionReferenceOwner referenceOwner = eventSystemObject.AddComponent<UIInputActionReferenceOwner>();
+            ConfigureOwnedInputModule(inputModule, configuration, referenceOwner);
+            ValidateRequiredActions(inputModule);
             return eventSystem;
         }
 
         /// <summary>
         /// 자동 생성한 모듈에 선택 설정 또는 프로젝트 전역 UI 액션을 연결한다.
         /// </summary>
-        private static void ConfigureOwnedInputModule(InputSystemUIInputModule inputModule, UIInputConfiguration configuration)
+        private static void ConfigureOwnedInputModule(
+            InputSystemUIInputModule inputModule,
+            UIInputConfiguration configuration,
+            UIInputActionReferenceOwner referenceOwner)
         {
+            InputActionAsset projectActions = GetProjectWideActions();
             if (configuration != null)
             {
-                ApplyConfiguration(inputModule, configuration);
+                ApplyConfiguration(inputModule, configuration, projectActions, referenceOwner);
                 return;
             }
 
-            InputActionAsset projectActions = GetProjectWideActions();
             if (projectActions == null)
             {
                 return;
             }
 
-            ApplyProjectWideActions(inputModule, projectActions);
+            ApplyProjectWideActions(inputModule, projectActions, referenceOwner);
         }
 
         /// <summary>
         /// 명시 설정에서 할당된 역할만 덮어쓴다.
         /// 기본 모듈 액션은 비어 있는 역할의 fallback으로 유지된다.
         /// </summary>
-        private static void ApplyConfiguration(InputSystemUIInputModule inputModule, UIInputConfiguration configuration)
+        private static void ApplyConfiguration(
+            InputSystemUIInputModule inputModule,
+            UIInputConfiguration configuration,
+            InputActionAsset projectActions,
+            UIInputActionReferenceOwner referenceOwner)
         {
-            inputModule.move = configuration.Navigate ?? inputModule.move;
-            inputModule.submit = configuration.Submit ?? inputModule.submit;
-            inputModule.cancel = configuration.Cancel ?? inputModule.cancel;
-            inputModule.point = configuration.Point ?? inputModule.point;
-            inputModule.leftClick = configuration.Click ?? inputModule.leftClick;
-            inputModule.rightClick = configuration.RightClick ?? inputModule.rightClick;
-            inputModule.middleClick = configuration.MiddleClick ?? inputModule.middleClick;
-            inputModule.scrollWheel = configuration.ScrollWheel ?? inputModule.scrollWheel;
-            inputModule.trackedDevicePosition = configuration.TrackedDevicePosition ?? inputModule.trackedDevicePosition;
-            inputModule.trackedDeviceOrientation = configuration.TrackedDeviceOrientation ?? inputModule.trackedDeviceOrientation;
+            inputModule.move = ResolveAction(configuration.Navigate, projectActions, "Navigate", inputModule.move, referenceOwner);
+            inputModule.submit = ResolveAction(configuration.Submit, projectActions, "Submit", inputModule.submit, referenceOwner);
+            inputModule.cancel = ResolveAction(configuration.Cancel, projectActions, "Cancel", inputModule.cancel, referenceOwner);
+            inputModule.point = ResolveAction(configuration.Point, projectActions, "Point", inputModule.point, referenceOwner);
+            inputModule.leftClick = ResolveAction(configuration.Click, projectActions, "Click", inputModule.leftClick, referenceOwner);
+            inputModule.rightClick = ResolveAction(configuration.RightClick, projectActions, "RightClick", inputModule.rightClick, referenceOwner);
+            inputModule.middleClick = ResolveAction(configuration.MiddleClick, projectActions, "MiddleClick", inputModule.middleClick, referenceOwner);
+            inputModule.scrollWheel = ResolveAction(configuration.ScrollWheel, projectActions, "ScrollWheel", inputModule.scrollWheel, referenceOwner);
+            inputModule.trackedDevicePosition = ResolveAction(configuration.TrackedDevicePosition, projectActions, "TrackedDevicePosition", inputModule.trackedDevicePosition, referenceOwner);
+            inputModule.trackedDeviceOrientation = ResolveAction(configuration.TrackedDeviceOrientation, projectActions, "TrackedDeviceOrientation", inputModule.trackedDeviceOrientation, referenceOwner);
+        }
+
+        /// <summary>
+        /// 명시 설정, 전역 UI 액션, 기본 모듈 액션 순서로 역할을 해석한다.
+        /// </summary>
+        private static InputActionReference ResolveAction(
+            InputActionReference configuredAction,
+            InputActionAsset projectActions,
+            string actionName,
+            InputActionReference defaultAction,
+            UIInputActionReferenceOwner referenceOwner)
+        {
+            return configuredAction ?? FindActionReference(projectActions, actionName, referenceOwner) ?? defaultAction;
         }
 
         /// <summary>
         /// 프로젝트 전역 액션의 표준 UI 역할을 찾아 연결한다.
         /// </summary>
-        private static void ApplyProjectWideActions(InputSystemUIInputModule inputModule, InputActionAsset projectActions)
+        private static void ApplyProjectWideActions(
+            InputSystemUIInputModule inputModule,
+            InputActionAsset projectActions,
+            UIInputActionReferenceOwner referenceOwner)
         {
-            inputModule.move = FindActionReference(projectActions, "Navigate") ?? inputModule.move;
-            inputModule.submit = FindActionReference(projectActions, "Submit") ?? inputModule.submit;
-            inputModule.cancel = FindActionReference(projectActions, "Cancel") ?? inputModule.cancel;
-            inputModule.point = FindActionReference(projectActions, "Point") ?? inputModule.point;
-            inputModule.leftClick = FindActionReference(projectActions, "Click") ?? inputModule.leftClick;
-            inputModule.rightClick = FindActionReference(projectActions, "RightClick") ?? inputModule.rightClick;
-            inputModule.middleClick = FindActionReference(projectActions, "MiddleClick") ?? inputModule.middleClick;
-            inputModule.scrollWheel = FindActionReference(projectActions, "ScrollWheel") ?? inputModule.scrollWheel;
-            inputModule.trackedDevicePosition = FindActionReference(projectActions, "TrackedDevicePosition") ?? inputModule.trackedDevicePosition;
-            inputModule.trackedDeviceOrientation = FindActionReference(projectActions, "TrackedDeviceOrientation") ?? inputModule.trackedDeviceOrientation;
+            inputModule.move = FindActionReference(projectActions, "Navigate", referenceOwner) ?? inputModule.move;
+            inputModule.submit = FindActionReference(projectActions, "Submit", referenceOwner) ?? inputModule.submit;
+            inputModule.cancel = FindActionReference(projectActions, "Cancel", referenceOwner) ?? inputModule.cancel;
+            inputModule.point = FindActionReference(projectActions, "Point", referenceOwner) ?? inputModule.point;
+            inputModule.leftClick = FindActionReference(projectActions, "Click", referenceOwner) ?? inputModule.leftClick;
+            inputModule.rightClick = FindActionReference(projectActions, "RightClick", referenceOwner) ?? inputModule.rightClick;
+            inputModule.middleClick = FindActionReference(projectActions, "MiddleClick", referenceOwner) ?? inputModule.middleClick;
+            inputModule.scrollWheel = FindActionReference(projectActions, "ScrollWheel", referenceOwner) ?? inputModule.scrollWheel;
+            inputModule.trackedDevicePosition = FindActionReference(projectActions, "TrackedDevicePosition", referenceOwner) ?? inputModule.trackedDevicePosition;
+            inputModule.trackedDeviceOrientation = FindActionReference(projectActions, "TrackedDeviceOrientation", referenceOwner) ?? inputModule.trackedDeviceOrientation;
         }
 
         /// <summary>
         /// UI 맵 우선으로 표준 액션을 찾는다.
         /// </summary>
-        private static InputActionReference FindActionReference(InputActionAsset actions, string actionName)
+        private static InputActionReference FindActionReference(
+            InputActionAsset actions,
+            string actionName,
+            UIInputActionReferenceOwner referenceOwner)
         {
+            if (actions == null)
+            {
+                return null;
+            }
+
             InputAction action = actions.FindAction($"UI/{actionName}", false) ?? actions.FindAction(actionName, false);
-            return action == null ? null : InputActionReference.Create(action);
+            return action == null ? null : referenceOwner.Own(InputActionReference.Create(action));
         }
 
         /// <summary>
@@ -154,7 +187,35 @@ namespace UIModule
                 ReportOnce(
                     "NonInputSystemModule",
                     "[UIModule] 기존 EventSystem이 InputSystemUIInputModule을 사용하지 않습니다. New Input System 게임패드 UI를 사용하려면 기존 모듈을 교체하거나 별도 EventSystem 구성을 검토하세요.");
+                return;
             }
+
+            ValidateRequiredActions(inputSystemModule);
+        }
+
+        /// <summary>
+        /// 기본 UI 조작에 필요한 역할이 비어 있으면 해결 방법을 한 번만 진단한다.
+        /// </summary>
+        private static void ValidateRequiredActions(InputSystemUIInputModule inputModule)
+        {
+            ValidateRequiredAction("Navigate", inputModule.move);
+            ValidateRequiredAction("Submit", inputModule.submit);
+            ValidateRequiredAction("Cancel", inputModule.cancel);
+        }
+
+        /// <summary>
+        /// 개별 필수 역할의 누락을 진단한다.
+        /// </summary>
+        private static void ValidateRequiredAction(string role, InputActionReference action)
+        {
+            if (action != null && action.action != null)
+            {
+                return;
+            }
+
+            ReportOnce(
+                $"Missing{role}",
+                $"[UIModule] UI {role} 액션이 비어 있습니다. UIInputConfiguration에 할당하거나 프로젝트 전역 UI/{role} 액션을 추가하세요.");
         }
 
         /// <summary>

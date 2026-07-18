@@ -28,6 +28,29 @@ namespace UIModule
         public bool BlocksLowerScopes => _blocksLowerScopes;
 
         /// <summary>
+        /// 런타임 생성 UI에서 선택과 Cancel 정책을 설정한다.
+        /// </summary>
+        public void Configure(
+            Selectable defaultSelection,
+            UICancelBehavior cancelBehavior,
+            bool keepSelectionOnPointerInput = true,
+            bool blocksLowerScopes = true)
+        {
+            _defaultSelection = defaultSelection;
+            _cancelBehavior = cancelBehavior;
+            _keepSelectionOnPointerInput = keepSelectionOnPointerInput;
+            _blocksLowerScopes = blocksLowerScopes;
+        }
+
+        /// <summary>
+        /// 런타임 생성 UI의 Custom Cancel 콜백을 추가한다.
+        /// </summary>
+        public void AddCancelListener(UnityAction listener)
+        {
+            _onCancel.AddListener(listener);
+        }
+
+        /// <summary>
         /// Custom Cancel 이벤트를 호출한다.
         /// </summary>
         public void InvokeCustomCancel()

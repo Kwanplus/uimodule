@@ -20,5 +20,19 @@ namespace UIModule.Tests
             Assert.That(first, Is.EqualTo(same));
             Assert.That(first, Is.Not.EqualTo(different));
         }
+
+        /// <summary>
+        /// 입력 장치 상태가 마지막 장치와 연결 상태를 함께 비교하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void DeviceStateEquality_UsesLastDeviceAndConnection()
+        {
+            UIInputDeviceState first = new UIInputDeviceState(UIInputDeviceType.Gamepad, true);
+            UIInputDeviceState same = new UIInputDeviceState(UIInputDeviceType.Gamepad, true);
+            UIInputDeviceState disconnected = new UIInputDeviceState(UIInputDeviceType.Gamepad, false);
+
+            Assert.That(first, Is.EqualTo(same));
+            Assert.That(first, Is.Not.EqualTo(disconnected));
+        }
     }
 }

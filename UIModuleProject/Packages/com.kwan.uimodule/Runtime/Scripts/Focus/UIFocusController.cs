@@ -36,11 +36,11 @@ namespace UIModule
             if (ui is BasePopup popup)
             {
                 BlockLowerSelectables(popup);
-                ScheduleFocus(popup);
+                ScheduleFocus(popup, false);
             }
             else if (!(ui is BaseScreen))
             {
-                ScheduleFocus(ui);
+                ScheduleFocus(ui, false);
             }
         }
 
@@ -61,7 +61,15 @@ namespace UIModule
         /// </summary>
         internal void HandleScreenBegan(BaseScreen screen)
         {
-            ScheduleFocus(screen);
+            ScheduleFocus(screen, false);
+        }
+
+        /// <summary>
+        /// Screen 스택 복귀 뒤 이전 선택을 우선 복원한다.
+        /// </summary>
+        internal void HandleScreenResumed(BaseScreen screen)
+        {
+            ScheduleFocus(screen, true);
         }
 
         /// <summary>
@@ -95,7 +103,7 @@ namespace UIModule
             BaseUI topUi = _manager.GetTopInputUI();
             if (topUi != null)
             {
-                ScheduleFocus(topUi);
+                ScheduleFocus(topUi, true);
             }
         }
 
@@ -113,7 +121,7 @@ namespace UIModule
             EventSystem eventSystem = _manager.EventSystem;
             if (eventSystem == null || !IsSelectableInUi(topUi, eventSystem.currentSelectedGameObject))
             {
-                SelectBestTarget(topUi);
+                SelectBestTarget(topUi, true);
             }
         }
 
@@ -174,7 +182,7 @@ namespace UIModule
             BaseUI topUi = _manager.GetTopInputUI();
             if (topUi != null)
             {
-                ScheduleFocus(topUi);
+                ScheduleFocus(topUi, true);
             }
         }
 
@@ -201,15 +209,15 @@ namespace UIModule
         /// <summary>
         /// 레이아웃이 반영된 다음 프레임 말미에 포커스를 적용한다.
         /// </summary>
-        private void ScheduleFocus(BaseUI ui)
+        private void ScheduleFocus(BaseUI ui, bool preferRememberedSelection)
         {
-            _manager.StartCoroutine(FocusAfterLayout(ui));
+            _manager.StartCoroutine(FocusAfterLayout(ui, preferRememberedSelection));
         }
 
         /// <summary>
         /// LayoutGroup이 만든 동적 Selectable까지 찾을 수 있게 렌더 전까지 대기한다.
         /// </summary>
-        private IEnumerator FocusAfterLayout(BaseUI expectedUi)
+        private IEnumerator FocusAfterLayout(BaseUI expectedUi, bool preferRememberedSelection)
         {
             // Batchmode PlayMode 테스트와 timeScale=0에서도 같은 프레임 경계를 사용하기 위해
             // WaitForEndOfFrame 대신 다음 Update까지 대기한 뒤 Canvas를 강제 갱신한다.
@@ -221,13 +229,13 @@ namespace UIModule
                 yield break;
             }
 
-            SelectBestTarget(expectedUi);
+            SelectBestTarget(expectedUi, preferRememberedSelection);
         }
 
         /// <summary>
         /// 명시 대상, 저장 대상, 첫 Selectable 순으로 선택한다.
         /// </summary>
-        private void SelectBestTarget(BaseUI ui)
+        private void SelectBestTarget(BaseUI ui, bool preferRememberedSelection)
         {
             EventSystem eventSystem = _manager.EventSystem;
             if (eventSystem == null)
@@ -236,6 +244,14 @@ namespace UIModule
             }
 
             UIFocusScope scope = ui.GetComponent<UIFocusScope>();
+            if (preferRememberedSelection
+                && _lastSelectedByUi.TryGetValue(ui, out GameObject rememberedTarget)
+                && IsSelectableInUi(ui, rememberedTarget))
+            {
+                eventSystem.SetSelectedGameObject(rememberedTarget);
+                return;
+            }
+
             Selectable explicitTarget = scope == null ? null : scope.DefaultSelection;
             if (IsSelectableValid(explicitTarget))
             {
@@ -243,9 +259,11 @@ namespace UIModule
                 return;
             }
 
-            if (_lastSelectedByUi.TryGetValue(ui, out GameObject rememberedTarget) && IsSelectableInUi(ui, rememberedTarget))
+            if (!preferRememberedSelection
+                && _lastSelectedByUi.TryGetValue(ui, out GameObject initialRememberedTarget)
+                && IsSelectableInUi(ui, initialRememberedTarget))
             {
-                eventSystem.SetSelectedGameObject(rememberedTarget);
+                eventSystem.SetSelectedGameObject(initialRememberedTarget);
                 return;
             }
 
@@ -267,10 +285,15 @@ namespace UIModule
             List<Selectable> blockedSelectables = new List<Selectable>();
             foreach (Selectable selectable in Selectable.allSelectablesArray)
             {
-                if (selectable == null
-                    || !selectable.gameObject.activeInHierarchy
-                    || IsWithin(popup, selectable.gameObject)
-                    || !_manager.IsManagedUiObject(selectable.gameObject))
+                if (selectable == null || !selectable.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                BaseUI owner = _manager.GetManagedUiOwner(selectable.gameObject);
+                if (owner == null
+                    || owner == popup
+                    || !_manager.IsLowerInputPriority(owner, popup))
                 {
                     continue;
                 }

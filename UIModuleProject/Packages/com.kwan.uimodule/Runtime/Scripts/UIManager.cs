@@ -15,6 +15,11 @@ namespace UIModule
     public class UIManager : MonoBehaviour
     {
         private static UIManager _instance;
+
+        /// <summary>
+        /// 새 Manager를 생성하지 않고 현재 인스턴스만 반환한다.
+        /// </summary>
+        internal static UIManager ExistingInstance => _instance;
         
         /// <summary>
         /// UIManager 싱글톤 인스턴스
@@ -51,6 +56,7 @@ namespace UIModule
         // Background/Overlay/System은 타입당 1개 재사용을 보장하기 위한 캐시
         private Dictionary<System.Type, BaseUI> _singlePerTypeLayerCache = new Dictionary<System.Type, BaseUI>();
         private List<BaseUI> _singleLayerPresentationOrder = new List<BaseUI>();
+        private HashSet<string> _reportedDiagnostics = new HashSet<string>();
         
         // 프리팹 경로 설정 (기본값: Resources/UIPrefabs)
         [SerializeField] private string _prefabPathPrefix = "UIPrefabs/";
@@ -436,6 +442,27 @@ namespace UIModule
         }
 
         /// <summary>
+        /// 외부에서 생성한 Popup을 UIManager 계약에 등록해 표시한다.
+        /// </summary>
+        public BasePopup ShowPopup(BasePopup popup)
+        {
+            if (popup == null)
+            {
+                return null;
+            }
+
+            if (!ContainsPopup(popup))
+            {
+                _focusController?.HandleBeforePopupShown(popup);
+                _popupStack.Push(popup);
+            }
+
+            popup.Show();
+            UpdateInputCaptureState();
+            return popup;
+        }
+
+        /// <summary>
         /// Background 표시 (타입당 1개 재사용)
         /// </summary>
         public T ShowBackground<T>() where T : BaseBackground
@@ -464,11 +491,17 @@ namespace UIModule
         /// </summary>
         public void CloseTopPopup()
         {
+            if (_lastCancelFrame == Time.frameCount)
+            {
+                return;
+            }
+
             if (_popupStack.Count > 0)
             {
                 BasePopup topPopup = _popupStack.Peek();
                 if (topPopup != null)
                 {
+                    _lastCancelFrame = Time.frameCount;
                     topPopup.OnBackKeyPressed();
                 }
             }
@@ -536,8 +569,85 @@ namespace UIModule
                 return;
             }
 
+            RemoveScreenFromStack(ui as BaseScreen);
+            RemoveCachedUi(ui);
             _singleLayerPresentationOrder.Remove(ui);
             UpdateInputCaptureState();
+
+            ResumeTopScreenAfterExternalRemoval();
+        }
+
+        /// <summary>
+        /// 파괴된 Screen을 스택의 어느 위치에서든 제거한다.
+        /// </summary>
+        private void RemoveScreenFromStack(BaseScreen screen)
+        {
+            if (screen == null)
+            {
+                return;
+            }
+
+            Stack<BaseScreen> retained = new Stack<BaseScreen>();
+            while (_screenStack.Count > 0)
+            {
+                BaseScreen current = _screenStack.Pop();
+                if (!ReferenceEquals(current, screen))
+                {
+                    retained.Push(current);
+                }
+            }
+
+            while (retained.Count > 0)
+            {
+                _screenStack.Push(retained.Pop());
+            }
+        }
+
+        /// <summary>
+        /// 파괴된 UI를 타입 캐시에서 제거한다.
+        /// </summary>
+        private void RemoveCachedUi(BaseUI ui)
+        {
+            List<System.Type> keysToRemove = new List<System.Type>();
+            foreach (KeyValuePair<System.Type, BaseUI> pair in _uiInstanceCache)
+            {
+                if (ReferenceEquals(pair.Value, ui))
+                {
+                    keysToRemove.Add(pair.Key);
+                }
+            }
+
+            foreach (System.Type key in keysToRemove)
+            {
+                _uiInstanceCache.Remove(key);
+            }
+
+            keysToRemove.Clear();
+            foreach (KeyValuePair<System.Type, BaseUI> pair in _singlePerTypeLayerCache)
+            {
+                if (ReferenceEquals(pair.Value, ui))
+                {
+                    keysToRemove.Add(pair.Key);
+                }
+            }
+
+            foreach (System.Type key in keysToRemove)
+            {
+                _singlePerTypeLayerCache.Remove(key);
+            }
+        }
+
+        /// <summary>
+        /// 최상위 Screen이 외부 파괴로 제거됐을 때 남은 Screen을 재개한다.
+        /// </summary>
+        private void ResumeTopScreenAfterExternalRemoval()
+        {
+            BaseScreen screen = GetCurrentScreen();
+            if (screen != null && !screen.IsActive)
+            {
+                screen.Show();
+                screen.NotifyScreenResumed();
+            }
         }
         
         /// <summary>
@@ -981,6 +1091,59 @@ namespace UIModule
         }
 
         /// <summary>
+        /// 관리 레이어 안에서 대상 Selectable을 소유한 UI 루트를 반환한다.
+        /// </summary>
+        internal BaseUI GetManagedUiOwner(GameObject target)
+        {
+            if (target == null)
+            {
+                return null;
+            }
+
+            Transform current = target.transform;
+            while (current != null)
+            {
+                BaseUI owner = current.GetComponent<BaseUI>();
+                if (owner != null)
+                {
+                    return IsManagedUiObject(owner.gameObject) ? owner : null;
+                }
+
+                current = current.parent;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Popup 모달 차단 대상이 입력 우선순위상 실제로 아래인지 반환한다.
+        /// </summary>
+        internal bool IsLowerInputPriority(BaseUI candidate, BasePopup popup)
+        {
+            if (candidate == null || popup == null || candidate == popup)
+            {
+                return false;
+            }
+
+            int candidatePriority = GetLayerInputPriority(candidate.Layer);
+            int popupPriority = GetLayerInputPriority(UILayer.Popup);
+            if (candidatePriority != popupPriority)
+            {
+                return candidatePriority < popupPriority;
+            }
+
+            if (!(candidate is BasePopup candidatePopup))
+            {
+                return false;
+            }
+
+            BasePopup[] popups = _popupStack.ToArray();
+            int candidateIndex = System.Array.IndexOf(popups, candidatePopup);
+            int popupIndex = System.Array.IndexOf(popups, popup);
+            return candidateIndex >= 0 && popupIndex >= 0 && candidateIndex > popupIndex;
+        }
+
+        /// <summary>
         /// 대상이 이 UIManager가 소유한 레이어 Canvas 아래에 있는지 반환한다.
         /// </summary>
         internal bool IsManagedUiObject(GameObject target)
@@ -1074,10 +1237,56 @@ namespace UIModule
         }
 
         /// <summary>
+        /// Popup 스택에 같은 인스턴스가 이미 등록됐는지 확인한다.
+        /// </summary>
+        private bool ContainsPopup(BasePopup popup)
+        {
+            foreach (BasePopup item in _popupStack)
+            {
+                if (ReferenceEquals(item, popup))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 레이어의 입력 우선순위를 반환한다.
+        /// </summary>
+        private static int GetLayerInputPriority(UILayer layer)
+        {
+            return (int)layer;
+        }
+
+        /// <summary>
+        /// 동일한 런타임 구성 경고를 한 번만 출력한다.
+        /// </summary>
+        private void ReportOnce(string key, string message)
+        {
+            if (_reportedDiagnostics.Add(key))
+            {
+                Debug.LogWarning(message);
+            }
+        }
+
+        /// <summary>
         /// UI 표시 이벤트를 포커스와 입력 점유 상태에 반영한다.
         /// </summary>
         private void HandleUiPresented(BaseUI ui)
         {
+            if (ui is BasePopup popup && !ContainsPopup(popup))
+            {
+                // 외부 Instantiate 후 BasePopup.Show()를 직접 호출한 경우에도
+                // 입력 점유와 Cancel 대상이 분리되지 않도록 같은 스택 계약에 등록한다.
+                _focusController?.HandleBeforePopupShown(popup);
+                _popupStack.Push(popup);
+                ReportOnce(
+                    "DirectPopupShow",
+                    "[UIModule] BasePopup.Show() 직접 호출을 감지했습니다. UIManager.ShowPopup(popup)을 사용해 Popup 표시를 등록하세요.");
+            }
+
             _focusController?.HandleShown(ui);
             UpdateInputCaptureState();
         }
@@ -1112,7 +1321,7 @@ namespace UIModule
         /// </summary>
         private void HandleScreenResumed(BaseScreen screen)
         {
-            _focusController?.HandleScreenBegan(screen);
+            _focusController?.HandleScreenResumed(screen);
         }
 
         /// <summary>
@@ -1192,14 +1401,14 @@ namespace UIModule
 
             if (change == InputDeviceChange.Added || change == InputDeviceChange.Reconnected)
             {
-                UpdateInputDeviceState(UIInputDeviceType.Gamepad);
+                UpdateInputDeviceState();
                 _focusController?.EnsureSelectionForNavigation();
                 return;
             }
 
             if (change == InputDeviceChange.Removed || change == InputDeviceChange.Disconnected)
             {
-                UpdateInputDeviceState(_inputDeviceState.LastInputDevice);
+                UpdateInputDeviceState();
             }
         }
 
@@ -1218,14 +1427,14 @@ namespace UIModule
                 return UIInputDeviceType.Keyboard;
             }
 
-            if (device is Pointer)
-            {
-                return UIInputDeviceType.Pointer;
-            }
-
             if (device is Touchscreen)
             {
                 return UIInputDeviceType.Touch;
+            }
+
+            if (device is Pointer)
+            {
+                return UIInputDeviceType.Pointer;
             }
 
             return UIInputDeviceType.Other;
@@ -1234,9 +1443,10 @@ namespace UIModule
         /// <summary>
         /// 입력 장치 상태를 변경 이벤트와 함께 갱신한다.
         /// </summary>
-        private void UpdateInputDeviceState(UIInputDeviceType deviceType)
+        private void UpdateInputDeviceState(UIInputDeviceType? deviceType = null)
         {
-            UIInputDeviceState nextState = new UIInputDeviceState(deviceType, Gamepad.all.Count > 0);
+            UIInputDeviceType lastInputDevice = deviceType ?? _inputDeviceState.LastInputDevice;
+            UIInputDeviceState nextState = new UIInputDeviceState(lastInputDevice, Gamepad.all.Count > 0);
             if (_inputDeviceState.Equals(nextState))
             {
                 return;
