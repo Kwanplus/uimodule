@@ -14,7 +14,8 @@ namespace UIModule
         IPointerEnterHandler,
         IPointerExitHandler,
         ISelectHandler,
-        IDeselectHandler
+        IDeselectHandler,
+        ISubmitHandler
     {
         // Hover/Select 시 적용할 배율. 인스펙터 옵션이 늘지 않도록 상수로 고정한다.
         private const float HighlightedScale = 1.05f;
@@ -49,6 +50,11 @@ namespace UIModule
         /// EventSystem이 이 버튼의 선택을 해제했을 때 발생하는 이벤트
         /// </summary>
         public event Action<BaseEventData> OnDeselected;
+
+        /// <summary>
+        /// EventSystem이 이 버튼에 Submit을 전달했을 때 발생하는 이벤트
+        /// </summary>
+        public event Action<BaseEventData> OnSubmitted;
 
         /// <summary>
         /// 버튼 컴포넌트 참조
@@ -129,6 +135,17 @@ namespace UIModule
             _isSelected = false;
             RefreshScale();
             OnDeselected?.Invoke(eventData);
+        }
+
+        /// <summary>
+        /// EventSystem Submit을 별도 통지한다.
+        /// </summary>
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (!isActiveAndEnabled || !IsInteractable())
+                return;
+
+            OnSubmitted?.Invoke(eventData);
         }
 
         /// <summary>

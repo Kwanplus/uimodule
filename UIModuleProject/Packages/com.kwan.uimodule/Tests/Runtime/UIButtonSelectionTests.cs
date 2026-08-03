@@ -36,6 +36,7 @@ namespace UIModule.Tests
             List<string> notifications = new List<string>();
             BaseEventData selectedEventData = null;
             BaseEventData deselectedEventData = null;
+            int submittedCount = 0;
 
             try
             {
@@ -50,6 +51,7 @@ namespace UIModule.Tests
                     deselectedEventData = eventData;
                 };
                 second.OnSelected += eventData => notifications.Add("Second.Selected");
+                first.OnSubmitted += _ => submittedCount++;
 
                 eventSystem.SetSelectedGameObject(first.gameObject);
                 eventSystem.SetSelectedGameObject(second.gameObject);
@@ -64,6 +66,7 @@ namespace UIModule.Tests
                 Assert.That(deselectedEventData, Is.Not.Null);
                 Assert.That(first.IsSelected, Is.False);
                 Assert.That(second.IsSelected, Is.True);
+                Assert.That(submittedCount, Is.Zero);
             }
             finally
             {
@@ -118,11 +121,13 @@ namespace UIModule.Tests
             PointerEventData pointerEventData = new PointerEventData(eventSystem);
             int selectedCount = 0;
             int deselectedCount = 0;
+            int submittedCount = 0;
 
             try
             {
                 button.OnSelected += _ => selectedCount++;
                 button.OnDeselected += _ => deselectedCount++;
+                button.OnSubmitted += _ => submittedCount++;
 
                 button.OnPointerEnter(pointerEventData);
 
@@ -130,12 +135,14 @@ namespace UIModule.Tests
                 Assert.That(selectedCount, Is.Zero);
                 Assert.That(deselectedCount, Is.Zero);
                 Assert.That(button.IsSelected, Is.False);
+                Assert.That(submittedCount, Is.Zero);
 
                 button.OnPointerExit(pointerEventData);
 
                 Assert.That(button.transform.localScale, Is.EqualTo(Vector3.one));
                 Assert.That(selectedCount, Is.Zero);
                 Assert.That(deselectedCount, Is.Zero);
+                Assert.That(submittedCount, Is.Zero);
             }
             finally
             {
@@ -144,10 +151,66 @@ namespace UIModule.Tests
         }
 
         /// <summary>
-        /// 포인터 클릭과 Submit이 기존 UIButton 클릭 이벤트를 계속 전달하고 Navigation 전역 이벤트는 발생시키지 않는지 검증한다.
+        /// 활성화되어 선택된 UIButton이 Submit을 받으면 Submit과 기존 클릭 이벤트를 각각 한 번 통지하는지 검증한다.
         /// </summary>
         [Test]
-        public void PointerClickAndSubmit_ForwardToExistingClickEvents()
+        public void Submit_NotifiesSubmittedAndClickEventsOnce()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton button = CreateButton("Button");
+            BaseEventData submitEventData = new BaseEventData(eventSystem);
+            int clickCount = 0;
+            int anyClickCount = 0;
+            int navigationCount = 0;
+            int submittedCount = 0;
+            BaseEventData receivedSubmitEventData = null;
+
+            try
+            {
+                button.OnClick += () => clickCount++;
+                button.OnSubmitted += eventData =>
+                {
+                    submittedCount++;
+                    receivedSubmitEventData = eventData;
+                };
+                UIButton.OnAnyClicked += HandleAnyClicked;
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
+                eventSystem.SetSelectedGameObject(button.gameObject);
+
+                ExecuteEvents.Execute<ISubmitHandler>(
+                    button.gameObject,
+                    submitEventData,
+                    ExecuteEvents.submitHandler);
+
+                Assert.That(submittedCount, Is.EqualTo(1));
+                Assert.That(receivedSubmitEventData, Is.SameAs(submitEventData));
+                Assert.That(clickCount, Is.EqualTo(1));
+                Assert.That(anyClickCount, Is.EqualTo(1));
+                Assert.That(navigationCount, Is.Zero);
+            }
+            finally
+            {
+                UIButton.OnAnyClicked -= HandleAnyClicked;
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                Object.DestroyImmediate(button.gameObject);
+            }
+
+            void HandleAnyClicked()
+            {
+                anyClickCount++;
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
+            }
+        }
+
+        /// <summary>
+        /// Pointer Click은 기존 클릭 이벤트만 통지하고 Submit 이벤트는 발생시키지 않는지 검증한다.
+        /// </summary>
+        [Test]
+        public void PointerClick_ForwardsClickWithoutSubmitted()
         {
             EventSystem eventSystem = CreateEventSystem();
             UIButton button = CreateButton("Button");
@@ -155,14 +218,15 @@ namespace UIModule.Tests
             {
                 button = PointerEventData.InputButton.Left
             };
-            BaseEventData submitEventData = new BaseEventData(eventSystem);
             int clickCount = 0;
             int anyClickCount = 0;
             int navigationCount = 0;
+            int submittedCount = 0;
 
             try
             {
                 button.OnClick += () => clickCount++;
+                button.OnSubmitted += _ => submittedCount++;
                 UIButton.OnAnyClicked += HandleAnyClicked;
                 UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
 
@@ -170,13 +234,10 @@ namespace UIModule.Tests
                     button.gameObject,
                     pointerEventData,
                     ExecuteEvents.pointerClickHandler);
-                ExecuteEvents.Execute<ISubmitHandler>(
-                    button.gameObject,
-                    submitEventData,
-                    ExecuteEvents.submitHandler);
 
-                Assert.That(clickCount, Is.EqualTo(2));
-                Assert.That(anyClickCount, Is.EqualTo(2));
+                Assert.That(clickCount, Is.EqualTo(1));
+                Assert.That(anyClickCount, Is.EqualTo(1));
+                Assert.That(submittedCount, Is.Zero);
                 Assert.That(navigationCount, Is.Zero);
             }
             finally
@@ -229,6 +290,62 @@ namespace UIModule.Tests
             finally
             {
                 Object.DestroyImmediate(buttonWithoutSubscribers.gameObject);
+            }
+        }
+
+        /// <summary>
+        /// 상호작용 불가 또는 비활성 UIButton은 Submit 이벤트를 통지하지 않는지 검증한다.
+        /// </summary>
+        [Test]
+        public void Submit_WhenNotInteractableOrInactive_DoesNotNotify()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton notInteractableButton = CreateButton("NotInteractable");
+            UIButton inactiveObjectButton = CreateButton("InactiveObject");
+            UIButton disabledComponentButton = CreateButton("DisabledComponent");
+            int submittedCount = 0;
+
+            try
+            {
+                notInteractableButton.OnSubmitted += _ => submittedCount++;
+                inactiveObjectButton.OnSubmitted += _ => submittedCount++;
+                disabledComponentButton.OnSubmitted += _ => submittedCount++;
+                notInteractableButton.SetInteractable(false);
+                inactiveObjectButton.gameObject.SetActive(false);
+                disabledComponentButton.enabled = false;
+
+                Assert.DoesNotThrow(() => ExecuteSubmit(notInteractableButton, eventSystem));
+                Assert.DoesNotThrow(() => ExecuteSubmit(inactiveObjectButton, eventSystem));
+                Assert.DoesNotThrow(() => ExecuteSubmit(disabledComponentButton, eventSystem));
+
+                Assert.That(submittedCount, Is.Zero);
+            }
+            finally
+            {
+                Object.DestroyImmediate(notInteractableButton.gameObject);
+                Object.DestroyImmediate(inactiveObjectButton.gameObject);
+                Object.DestroyImmediate(disabledComponentButton.gameObject);
+            }
+        }
+
+        /// <summary>
+        /// Submit 이벤트에 구독자가 없어도 EventSystem Submit이 예외 없이 처리되는지 검증한다.
+        /// </summary>
+        [Test]
+        public void Submit_WithoutSubscribers_DoesNotThrow()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton button = CreateButton("Button");
+
+            try
+            {
+                eventSystem.SetSelectedGameObject(button.gameObject);
+
+                Assert.DoesNotThrow(() => ExecuteSubmit(button, eventSystem));
+            }
+            finally
+            {
+                Object.DestroyImmediate(button.gameObject);
             }
         }
 
@@ -422,6 +539,17 @@ namespace UIModule.Tests
         {
             GameObject buttonObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             return buttonObject.AddComponent<UIButton>();
+        }
+
+        /// <summary>
+        /// EventSystem Submit 이벤트를 지정한 UIButton에 전달한다.
+        /// </summary>
+        private static void ExecuteSubmit(UIButton button, EventSystem eventSystem)
+        {
+            ExecuteEvents.Execute<ISubmitHandler>(
+                button.gameObject,
+                new BaseEventData(eventSystem),
+                ExecuteEvents.submitHandler);
         }
 
         /// <summary>
