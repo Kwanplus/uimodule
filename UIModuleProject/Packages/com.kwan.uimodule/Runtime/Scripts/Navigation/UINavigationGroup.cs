@@ -13,6 +13,43 @@ namespace UIModule
         [SerializeField] private Selectable[] _selectables;
 
         private readonly Dictionary<Selectable, Navigation> _originalNavigation = new Dictionary<Selectable, Navigation>();
+        private readonly List<Selectable> _runtimeSelectables = new List<Selectable>();
+        private bool _hasRuntimeSelectables;
+
+        /// <summary>
+        /// 런타임 Navigation 대상 목록을 설정한다.
+        /// </summary>
+        /// <param name="selectables">Navigation에 사용할 대상 목록이다. null은 명시적 빈 목록으로 처리한다.</param>
+        public void SetRuntimeSelectables(IReadOnlyList<Selectable> selectables)
+        {
+            RestoreNavigation();
+            _hasRuntimeSelectables = true;
+            _runtimeSelectables.Clear();
+
+            if (selectables == null)
+            {
+                return;
+            }
+
+            HashSet<Selectable> uniqueSelectables = new HashSet<Selectable>();
+            foreach (Selectable selectable in selectables)
+            {
+                if (selectable != null && uniqueSelectables.Add(selectable))
+                {
+                    _runtimeSelectables.Add(selectable);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 런타임 Navigation 대상 설정을 해제하고 Inspector 또는 자동 탐색 대상으로 복귀한다.
+        /// </summary>
+        public void ClearRuntimeSelectables()
+        {
+            RestoreNavigation();
+            _runtimeSelectables.Clear();
+            _hasRuntimeSelectables = false;
+        }
 
         /// <summary>
         /// 현재 대상 목록을 사용해 Navigation을 생성한다.
@@ -75,13 +112,11 @@ namespace UIModule
         }
 
         /// <summary>
-        /// 직렬화 목록 또는 하위 Selectable에서 유효 대상 목록을 만든다.
+        /// 런타임 목록, 직렬화 목록 또는 하위 Selectable에서 유효 대상 목록을 만든다.
         /// </summary>
         private List<Selectable> GetValidSelectables()
         {
-            Selectable[] source = _selectables == null || _selectables.Length == 0
-                ? GetComponentsInChildren<Selectable>(_includeInactive)
-                : _selectables;
+            IReadOnlyList<Selectable> source = GetSelectableSource();
             List<Selectable> result = new List<Selectable>();
 
             foreach (Selectable selectable in source)
@@ -95,6 +130,24 @@ namespace UIModule
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Navigation 대상 우선순위에 따라 원본 목록을 반환한다.
+        /// </summary>
+        private IReadOnlyList<Selectable> GetSelectableSource()
+        {
+            if (_hasRuntimeSelectables)
+            {
+                return _runtimeSelectables;
+            }
+
+            if (_selectables != null && _selectables.Length > 0)
+            {
+                return _selectables;
+            }
+
+            return GetComponentsInChildren<Selectable>(_includeInactive);
         }
     }
 }
