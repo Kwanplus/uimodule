@@ -21,6 +21,11 @@ namespace UIModule
 
         public static event Action OnAnyClicked;
 
+        /// <summary>
+        /// 키보드·게임패드 방향 Navigation으로 UIButton이 선택됐을 때 발생하는 전역 이벤트
+        /// </summary>
+        public static event Action OnAnyNavigationSelected;
+
         [Header("버튼 설정")]
         [SerializeField] private Button _button;
         [SerializeField] private bool enableSelectScale = true;
@@ -110,6 +115,10 @@ namespace UIModule
             _isSelected = true;
             RefreshScale();
             OnSelected?.Invoke(eventData);
+
+            // 방향 Navigation만 전역 통지한다. 포인터·프로그램 선택·Submit은 제외한다.
+            if (eventData is AxisEventData)
+                OnAnyNavigationSelected?.Invoke();
         }
 
         /// <summary>

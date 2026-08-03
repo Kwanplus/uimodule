@@ -144,7 +144,7 @@ namespace UIModule.Tests
         }
 
         /// <summary>
-        /// 포인터 클릭과 Submit이 기존 UIButton 클릭 이벤트를 계속 전달하는지 검증한다.
+        /// 포인터 클릭과 Submit이 기존 UIButton 클릭 이벤트를 계속 전달하고 Navigation 전역 이벤트는 발생시키지 않는지 검증한다.
         /// </summary>
         [Test]
         public void PointerClickAndSubmit_ForwardToExistingClickEvents()
@@ -158,11 +158,13 @@ namespace UIModule.Tests
             BaseEventData submitEventData = new BaseEventData(eventSystem);
             int clickCount = 0;
             int anyClickCount = 0;
+            int navigationCount = 0;
 
             try
             {
                 button.OnClick += () => clickCount++;
                 UIButton.OnAnyClicked += HandleAnyClicked;
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
 
                 ExecuteEvents.Execute<IPointerClickHandler>(
                     button.gameObject,
@@ -175,16 +177,23 @@ namespace UIModule.Tests
 
                 Assert.That(clickCount, Is.EqualTo(2));
                 Assert.That(anyClickCount, Is.EqualTo(2));
+                Assert.That(navigationCount, Is.Zero);
             }
             finally
             {
                 UIButton.OnAnyClicked -= HandleAnyClicked;
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
                 Object.DestroyImmediate(button.gameObject);
             }
 
             void HandleAnyClicked()
             {
                 anyClickCount++;
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
             }
         }
 
@@ -220,6 +229,180 @@ namespace UIModule.Tests
             finally
             {
                 Object.DestroyImmediate(buttonWithoutSubscribers.gameObject);
+            }
+        }
+
+        /// <summary>
+        /// AxisEventData 기반 방향 Navigation 선택만 전역 이벤트를 1회 통지하는지 검증한다.
+        /// </summary>
+        [Test]
+        public void NavigationSelection_WithAxisEventData_NotifiesGlobalOnce()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton first = CreateButton("First");
+            UIButton second = CreateButton("Second");
+            Navigation firstNavigation = first.Button.navigation;
+            firstNavigation.mode = Navigation.Mode.Explicit;
+            firstNavigation.selectOnDown = second.Button;
+            first.Button.navigation = firstNavigation;
+            int navigationCount = 0;
+            int selectedCount = 0;
+
+            try
+            {
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
+                second.OnSelected += _ => selectedCount++;
+
+                eventSystem.SetSelectedGameObject(first.gameObject);
+                Assert.That(navigationCount, Is.Zero);
+
+                AxisEventData axisEventData = new AxisEventData(eventSystem)
+                {
+                    moveDir = MoveDirection.Down
+                };
+                ExecuteEvents.Execute(
+                    first.gameObject,
+                    axisEventData,
+                    ExecuteEvents.moveHandler);
+
+                Assert.That(eventSystem.currentSelectedGameObject, Is.EqualTo(second.gameObject));
+                Assert.That(navigationCount, Is.EqualTo(1));
+                Assert.That(selectedCount, Is.EqualTo(1));
+                Assert.That(second.IsSelected, Is.True);
+
+                // 이동 대상이 없으면 추가 통지하지 않는다.
+                AxisEventData noTargetEventData = new AxisEventData(eventSystem)
+                {
+                    moveDir = MoveDirection.Down
+                };
+                ExecuteEvents.Execute(
+                    second.gameObject,
+                    noTargetEventData,
+                    ExecuteEvents.moveHandler);
+                Assert.That(navigationCount, Is.EqualTo(1));
+
+                // 같은 Button을 AxisEventData로 재선택해도 EventSystem이 early return 하므로 중복 통지하지 않는다.
+                eventSystem.SetSelectedGameObject(second.gameObject, new AxisEventData(eventSystem));
+                Assert.That(navigationCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                Object.DestroyImmediate(first.gameObject);
+                Object.DestroyImmediate(second.gameObject);
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
+            }
+        }
+
+        /// <summary>
+        /// PointerEventData로 선택하면 전역 Navigation 이벤트가 발생하지 않는지 검증한다.
+        /// </summary>
+        [Test]
+        public void NavigationSelection_WithPointerEventData_DoesNotNotifyGlobal()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton button = CreateButton("Button");
+            int navigationCount = 0;
+            int selectedCount = 0;
+
+            try
+            {
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
+                button.OnSelected += _ => selectedCount++;
+
+                eventSystem.SetSelectedGameObject(button.gameObject, new PointerEventData(eventSystem));
+
+                Assert.That(selectedCount, Is.EqualTo(1));
+                Assert.That(navigationCount, Is.Zero);
+                Assert.That(button.IsSelected, Is.True);
+            }
+            finally
+            {
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                Object.DestroyImmediate(button.gameObject);
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
+            }
+        }
+
+        /// <summary>
+        /// 일반 BaseEventData 기반 프로그램 선택은 전역 Navigation 이벤트를 발생시키지 않는지 검증한다.
+        /// </summary>
+        [Test]
+        public void NavigationSelection_WithBaseEventData_DoesNotNotifyGlobal()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton button = CreateButton("Button");
+            int navigationCount = 0;
+            int selectedCount = 0;
+
+            try
+            {
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
+                button.OnSelected += _ => selectedCount++;
+
+                eventSystem.SetSelectedGameObject(button.gameObject);
+
+                Assert.That(selectedCount, Is.EqualTo(1));
+                Assert.That(navigationCount, Is.Zero);
+            }
+            finally
+            {
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                Object.DestroyImmediate(button.gameObject);
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
+            }
+        }
+
+        /// <summary>
+        /// 전역 Navigation 이벤트 구독 해제 후 추가 통지가 없고, 구독자가 없어도 예외가 없는지 검증한다.
+        /// </summary>
+        [Test]
+        public void NavigationSelection_AfterUnsubscribe_DoesNotNotifyGlobal()
+        {
+            EventSystem eventSystem = CreateEventSystem();
+            UIButton button = CreateButton("Button");
+            int navigationCount = 0;
+
+            try
+            {
+                UIButton.OnAnyNavigationSelected += HandleNavigationSelected;
+
+                eventSystem.SetSelectedGameObject(
+                    button.gameObject,
+                    new AxisEventData(eventSystem) { moveDir = MoveDirection.Right });
+                Assert.That(navigationCount, Is.EqualTo(1));
+
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                navigationCount = 0;
+
+                eventSystem.SetSelectedGameObject(null);
+                Assert.DoesNotThrow(() =>
+                    eventSystem.SetSelectedGameObject(
+                        button.gameObject,
+                        new AxisEventData(eventSystem) { moveDir = MoveDirection.Left }));
+                Assert.That(navigationCount, Is.Zero);
+            }
+            finally
+            {
+                UIButton.OnAnyNavigationSelected -= HandleNavigationSelected;
+                Object.DestroyImmediate(button.gameObject);
+            }
+
+            void HandleNavigationSelected()
+            {
+                navigationCount++;
             }
         }
 
