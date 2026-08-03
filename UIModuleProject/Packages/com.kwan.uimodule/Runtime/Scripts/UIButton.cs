@@ -36,9 +36,24 @@ namespace UIModule
         public event Action OnClick;
 
         /// <summary>
+        /// EventSystem이 이 버튼을 선택했을 때 발생하는 이벤트
+        /// </summary>
+        public event Action<BaseEventData> OnSelected;
+
+        /// <summary>
+        /// EventSystem이 이 버튼의 선택을 해제했을 때 발생하는 이벤트
+        /// </summary>
+        public event Action<BaseEventData> OnDeselected;
+
+        /// <summary>
         /// 버튼 컴포넌트 참조
         /// </summary>
         public Button Button => _button;
+
+        /// <summary>
+        /// EventSystem 기준으로 현재 버튼이 선택된 상태인지 여부
+        /// </summary>
+        public bool IsSelected => _isSelected;
 
         private void Awake()
         {
@@ -88,24 +103,23 @@ namespace UIModule
         }
 
         /// <summary>
-        /// 게임패드/키보드 등으로 선택되었을 때 스케일 피드백을 적용한다.
+        /// 게임패드/키보드 등으로 선택되었을 때 상태를 갱신하고 선택 이벤트를 통지한다.
         /// </summary>
         public void OnSelect(BaseEventData eventData)
         {
-            if (!CanApplySelectScale())
-                return;
-
             _isSelected = true;
             RefreshScale();
+            OnSelected?.Invoke(eventData);
         }
 
         /// <summary>
-        /// 선택이 해제되었을 때, 포인터가 없으면 스케일을 되돌린다.
+        /// 선택이 해제되었을 때 상태를 갱신하고 선택 해제 이벤트를 통지한다.
         /// </summary>
         public void OnDeselect(BaseEventData eventData)
         {
             _isSelected = false;
             RefreshScale();
+            OnDeselected?.Invoke(eventData);
         }
 
         /// <summary>
