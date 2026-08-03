@@ -12,11 +12,13 @@ namespace UIModule.Editor
     {
         private SerializedProperty _prefabPathPrefixProp;
         private SerializedProperty _assetsFolderPathProp;
+        private SerializedProperty _inputPromptConfigurationProp;
         
         private void OnEnable()
         {
             _prefabPathPrefixProp = serializedObject.FindProperty("_prefabPathPrefix");
             _assetsFolderPathProp = serializedObject.FindProperty("_assetsFolderPath");
+            _inputPromptConfigurationProp = serializedObject.FindProperty("_inputPromptConfiguration");
         }
         
         public override void OnInspectorGUI()
@@ -36,11 +38,18 @@ namespace UIModule.Editor
             EditorGUI.EndDisabledGroup();
             
             EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField("입력 프롬프트 설정", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(
+                _inputPromptConfigurationProp,
+                new GUIContent("공용 Xbox Sprite 설정", "소비 프로젝트에서 생성한 UIInputPromptConfiguration 에셋을 연결합니다."));
+
+            EditorGUILayout.Space(10);
             
             // 안내 메시지
             EditorGUILayout.HelpBox(
-                "이 설정은 UI Dashboard에서 기준 폴더를 변경하면 자동으로 업데이트됩니다.\n" +
-                "직접 수정하지 마세요.",
+                "프리팹 경로는 UI Dashboard에서 기준 폴더를 변경하면 자동으로 업데이트됩니다.\n" +
+                "공용 Xbox Sprite 설정은 소비 프로젝트의 UIInputPromptConfiguration 에셋을 직접 연결하세요.",
                 MessageType.Info);
             
             EditorGUILayout.Space(5);

@@ -39,6 +39,9 @@ namespace UIModule
         [Tooltip("Assets 기준 전체 경로 (에디터 전용)")]
         [SerializeField] private string _assetsFolderPath = "Assets/Resources/UIPrefabs";
         
+        [Header("입력 프롬프트 설정")]
+        [SerializeField] private UIInputPromptConfiguration _inputPromptConfiguration;
+
         /// <summary>
         /// Resources 폴더 기준 프리팹 경로 접두사
         /// 빈 문자열("")은 Resources 루트 폴더를 의미
@@ -66,6 +69,11 @@ namespace UIModule
         /// </summary>
         public string AssetsFolderPath => _assetsFolderPath;
         
+        /// <summary>
+        /// 모든 UI 입력 프롬프트가 공유하는 Xbox Sprite 설정이다.
+        /// </summary>
+        public UIInputPromptConfiguration InputPromptConfiguration => _inputPromptConfiguration;
+
         /// <summary>
         /// 설정 업데이트 (에디터에서만 호출)
         /// </summary>

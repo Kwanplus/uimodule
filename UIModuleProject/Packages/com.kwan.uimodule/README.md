@@ -50,6 +50,20 @@ uiManager.InputDeviceChanged += state =>
 
 `LastInputDevice`는 실제 UI 액션을 수행한 장치만 반영합니다. Gamepad 연결·재연결은 `IsGamepadConnected`와 포커스만 갱신합니다.
 
+## Xbox 입력 프롬프트
+
+소비 프로젝트에서 `UIInputPromptConfiguration` 에셋을 생성하고 Xbox 버튼별 Sprite를 연결한 뒤, `Assets/Resources/UIModuleSettings.asset`의 **공용 Xbox Sprite 설정**에 할당합니다. 실제 Sprite와 설정 에셋은 소비 프로젝트가 관리하며 UIModule 패키지는 참조와 표시 기능만 제공합니다.
+
+프롬프트를 표시할 오브젝트에는 `UIInputPromptView`를 추가하고 별도 프롬프트 컨테이너, 아이콘 `Image`, 표시할 `XboxButtonType`을 지정합니다. 마지막 UI 입력이 Gamepad일 때만 대응 Sprite를 표시하며, Keyboard·Pointer·Touch·Other 입력과 설정 또는 Sprite 누락 시에는 컨테이너를 숨깁니다.
+
+`InputSystemUIInputModule`이 추적하지 않는 화면별 액션(Start/Menu 등)은 실제 `performed` 콜백에서 보고합니다.
+
+```csharp
+_startAction.performed += UIManager.Instance.ReportInputDevice;
+```
+
+이 API는 마지막 입력 장치 상태와 `InputDeviceChanged`만 갱신하며 Start/Menu 명령을 실행하지 않습니다.
+
 ## 검증과 샘플
 
 - `Tools > UIModule > Validate Gamepad UI`에서 Default Selection, Navigation.None, Explicit 링크, Navigation Group(Grid/Spatial 포함), ScrollRect 구성을 검사합니다. Navigation Group은 배열이 비어 있으면 하위 Selectable 전체를, 배열이 있으면 그 배열의 항목만 관리 대상으로 판단합니다.

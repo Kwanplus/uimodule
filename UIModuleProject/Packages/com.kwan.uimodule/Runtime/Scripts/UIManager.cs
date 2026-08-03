@@ -130,6 +130,20 @@ namespace UIModule
 
             _inputConfiguration = configuration;
         }
+
+        /// <summary>
+        /// InputSystemUIInputModule이 추적하지 않는 UI 액션의 수행 장치를 보고한다.
+        /// </summary>
+        /// <param name="context">실제로 수행된 Input Action 콜백 정보다.</param>
+        public void ReportInputDevice(InputAction.CallbackContext context)
+        {
+            if (!context.performed || context.control == null)
+            {
+                return;
+            }
+
+            UpdateInputDeviceState(GetDeviceType(context.control.device));
+        }
         
         private void Awake()
         {

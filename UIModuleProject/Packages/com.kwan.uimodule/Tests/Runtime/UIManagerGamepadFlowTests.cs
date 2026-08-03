@@ -400,6 +400,64 @@ namespace UIModule.Tests
         }
 
         /// <summary>
+        /// 화면별 비표준 Input Action 수행이 마지막 UI 입력 장치와 변경 이벤트를 갱신하는지 검증한다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CustomPerformedAction_ReportsInputDevice()
+        {
+            UIManager manager = UIManager.Instance;
+            manager.SetPoolingEnabled(false);
+            manager.ShowScreen<FocusTestScreen>();
+            yield return null;
+
+            Gamepad gamepad = InputSystem.AddDevice<Gamepad>();
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            InputAction customAction = new InputAction("CustomStart", InputActionType.Button);
+            customAction.AddBinding("<Gamepad>/buttonSouth");
+            customAction.AddBinding("<Keyboard>/enter");
+            int changedCount = 0;
+
+            try
+            {
+                customAction.performed += manager.ReportInputDevice;
+                customAction.Enable();
+                manager.InputDeviceChanged += HandleInputDeviceChanged;
+
+                InputSystem.QueueStateEvent(gamepad, new GamepadState
+                {
+                    buttons = 1u << (int)GamepadButton.South
+                });
+                yield return null;
+                yield return null;
+
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Gamepad));
+                Assert.That(changedCount, Is.EqualTo(1));
+
+                InputSystem.QueueStateEvent(gamepad, new GamepadState());
+                yield return null;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.Enter));
+                yield return null;
+                yield return null;
+
+                Assert.That(manager.InputDeviceState.LastInputDevice, Is.EqualTo(UIInputDeviceType.Keyboard));
+                Assert.That(changedCount, Is.EqualTo(2));
+            }
+            finally
+            {
+                manager.InputDeviceChanged -= HandleInputDeviceChanged;
+                customAction.performed -= manager.ReportInputDevice;
+                customAction.Dispose();
+                InputSystem.RemoveDevice(keyboard);
+                InputSystem.RemoveDevice(gamepad);
+            }
+
+            void HandleInputDeviceChanged(UIInputDeviceState state)
+            {
+                changedCount++;
+            }
+        }
+
+        /// <summary>
         /// 입력 장치 분류 결과를 공개 상태 갱신 경로에 전달한다.
         /// </summary>
         private static void UpdateTrackedDevice(UIManager manager, InputDevice device)
